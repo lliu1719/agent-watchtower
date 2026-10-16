@@ -23,4 +23,4 @@ ssh "$HOST" "cd ~/$DIR && test -f .env || { echo 'missing .env on remote; rerun 
 
 echo "→ health check"
 ssh "$HOST" 'for i in $(seq 1 15); do curl -sf localhost:8090/api/state >/dev/null && { echo "watchtower up on :8090"; exit 0; }; sleep 1; done; echo "not responding; recent logs:"; docker logs --tail 30 watchtower; exit 1'
-ssh "$HOST" 'curl -s -o /dev/null -w "AI Engine gateway reachable from VM: HTTP %{http_code} (401 = reachable)\n" --max-time 10 https://prodentapigw.itaws.equinix.com/eap-backend/api/models || echo "AI Engine gateway NOT reachable from VM -> set AI_ENGINE_MODE=replay"'
+ssh "$HOST" 'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://prodentapigw.itaws.equinix.com/eap-backend/api/models); if [ "$code" = "000" ]; then echo "AI Engine gateway NOT reachable from VM (use bridge/replay mode)"; else echo "AI Engine gateway reachable from VM: HTTP $code"; fi'
