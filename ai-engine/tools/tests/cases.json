@@ -1,0 +1,202 @@
+{
+  "empty": {
+    "input": {
+      "events": []
+    },
+    "expected": {
+      "score": 0,
+      "hotspots": [],
+      "shared_writes": []
+    }
+  },
+  "below_threshold_2_agents": {
+    "input": {
+      "events": [
+        {
+          "event_id": "e1",
+          "agent_id": "a1",
+          "action": "data_read",
+          "resource": "docs/readme.md"
+        },
+        {
+          "event_id": "e2",
+          "agent_id": "a2",
+          "action": "data_read",
+          "resource": "docs/readme.md"
+        }
+      ]
+    },
+    "expected": {
+      "score": 0,
+      "hotspots": [],
+      "shared_writes": []
+    }
+  },
+  "same_agent_repeated_benign": {
+    "input": {
+      "events": [
+        {
+          "event_id": "e1",
+          "agent_id": "ci-bot",
+          "action": "data_write",
+          "resource": "build/out.txt"
+        },
+        {
+          "event_id": "e2",
+          "agent_id": "ci-bot",
+          "action": "data_write",
+          "resource": "build/out.txt"
+        },
+        {
+          "event_id": "e3",
+          "agent_id": "ci-bot",
+          "action": "data_write",
+          "resource": "build/out.txt"
+        }
+      ]
+    },
+    "expected": {
+      "score": 0,
+      "hotspots": [],
+      "shared_writes": []
+    }
+  },
+  "exactly_threshold_readonly": {
+    "input": {
+      "events": [
+        {
+          "event_id": "e1",
+          "agent_id": "a1",
+          "action": "data_read",
+          "resource": "wiki"
+        },
+        {
+          "event_id": "e2",
+          "agent_id": "a2",
+          "action": "data_read",
+          "resource": "wiki"
+        },
+        {
+          "event_id": "e3",
+          "agent_id": "a3",
+          "action": "data_read",
+          "resource": "wiki"
+        }
+      ]
+    },
+    "expected": {
+      "score": 30,
+      "hotspots": [
+        {
+          "resource": "wiki",
+          "agents": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "writers": [],
+          "sensitive": false,
+          "event_ids": [
+            "e1",
+            "e2",
+            "e3"
+          ]
+        }
+      ],
+      "shared_writes": []
+    }
+  },
+  "sensitive_dir_rollup": {
+    "input": {
+      "events": [
+        {
+          "event_id": "e1",
+          "agent_id": "a1",
+          "action": "tool_call",
+          "resource": "scoring/"
+        },
+        {
+          "event_id": "e2",
+          "agent_id": "a2",
+          "action": "data_read",
+          "resource": "scoring/db_config.yaml"
+        },
+        {
+          "event_id": "e3",
+          "agent_id": "a3",
+          "action": "data_write",
+          "resource": "scoring/scores.db"
+        }
+      ]
+    },
+    "expected": {
+      "score": 85,
+      "hotspots": [
+        {
+          "resource": "scoring/",
+          "agents": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "writers": [
+            "a1",
+            "a3"
+          ],
+          "sensitive": true,
+          "event_ids": [
+            "e1",
+            "e2",
+            "e3"
+          ]
+        }
+      ],
+      "shared_writes": [
+        "scoring/"
+      ]
+    }
+  },
+  "custom_threshold_2": {
+    "input": {
+      "events": [
+        {
+          "event_id": "e1",
+          "agent_id": "a1",
+          "action": "data_write",
+          "resource": "secrets.env"
+        },
+        {
+          "event_id": "e2",
+          "agent_id": "a2",
+          "action": "data_write",
+          "resource": "secrets.env"
+        }
+      ],
+      "fan_in_threshold": 2
+    },
+    "expected": {
+      "score": 75,
+      "hotspots": [
+        {
+          "resource": "secrets.env",
+          "agents": [
+            "a1",
+            "a2"
+          ],
+          "writers": [
+            "a1",
+            "a2"
+          ],
+          "sensitive": true,
+          "event_ids": [
+            "e1",
+            "e2"
+          ]
+        }
+      ],
+      "shared_writes": [
+        "secrets.env"
+      ]
+    }
+  }
+}

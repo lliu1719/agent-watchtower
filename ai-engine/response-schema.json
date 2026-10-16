@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": { "type": "string", "enum": ["BENIGN", "SUSPICIOUS", "COORDINATED_THREAT"] },
+    "risk_level": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+    "confidence": { "type": "number" },
+    "collective_intent": { "type": "string" },
+    "summary": { "type": "string" },
+    "patterns": { "type": "array", "items": { "type": "string" } },
+    "involved_agents": { "type": "array", "items": { "type": "string" } },
+    "target_resources": { "type": "array", "items": { "type": "string" } },
+    "coordination_channel": { "type": ["string", "null"] },
+    "attack_stage": { "type": "string", "enum": ["none", "recon", "access", "modification", "exfiltration"] },
+    "reasoning_steps": { "type": "array", "items": { "type": "string" } },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "event_id": { "type": "string" },
+          "why": { "type": "string" }
+        },
+        "required": ["event_id", "why"]
+      }
+    },
+    "why_guardrails_missed": { "type": "string" },
+    "human_review_note": { "type": "string" }
+  },
+  "required": ["verdict", "risk_level", "confidence", "summary"]
+}
