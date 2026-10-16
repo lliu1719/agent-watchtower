@@ -1,0 +1,20 @@
+services:
+  watchtower:
+    build: .
+    container_name: watchtower
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AI_ENGINE_MODE: ${AI_ENGINE_MODE:-live}
+    ports:
+      - "8090:8000"
+    volumes:
+      - ./backend/recordings:/app/backend/recordings
+    networks:
+      - default
+      - npm
+
+networks:
+  npm:
+    name: nginx-proxy-manager_default
+    external: true

@@ -35,7 +35,7 @@ Return ONLY a single valid JSON object matching the response schema — no markd
   "patterns": ["pattern names from the skill"],
   "involved_agents": ["agent_id"],
   "target_resources": ["resource"],
-  "coordination_channel": "resource used to coordinate, or null",
+  "coordination_channel": "resource used to coordinate, or \"none\"",
   "attack_stage": "none | recon | access | modification | exfiltration",
   "reasoning_steps": ["max 25 words each, 3-6 steps"],
   "evidence": [{"event_id": "e-001", "why": "short reason"}],

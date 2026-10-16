@@ -9,7 +9,7 @@
     "patterns": { "type": "array", "items": { "type": "string" } },
     "involved_agents": { "type": "array", "items": { "type": "string" } },
     "target_resources": { "type": "array", "items": { "type": "string" } },
-    "coordination_channel": { "type": ["string", "null"] },
+    "coordination_channel": { "type": "string" },
     "attack_stage": { "type": "string", "enum": ["none", "recon", "access", "modification", "exfiltration"] },
     "reasoning_steps": { "type": "array", "items": { "type": "string" } },
     "evidence": {
