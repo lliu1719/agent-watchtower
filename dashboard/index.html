@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Equinix Agent WatchTower</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="wordmark">EQUINIX</span>
+      <span class="product">Agent WatchTower</span>
+      <span class="tagline">Current guardrails inspect prompts. WatchTower inspects agent societies.</span>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill"><span class="dot" id="live-dot"></span><span id="live-label">Connecting</span></span>
+    <span class="pill"><span class="dot good" id="vc-dot"></span>Fabric VC <span id="vc-id"></span>: <span id="vc-state">UP</span></span>
+    <span class="pill" title="Where the analysis comes from">AI Engine: <span id="ai-mode">live</span></span>
+    <button class="danger" id="btn-kill" title="Manual kill switch">Kill switch</button>
+  </header>
+
+  <div class="incident" id="incident">
+    <div>
+      <div class="title" id="incident-title"></div>
+      <div class="meta" id="incident-meta"></div>
+    </div>
+    <div class="spacer"></div>
+    <button id="btn-approve">Approve restore after review</button>
+  </div>
+
+  <main>
+    <section class="panel" id="risk">
+      <h2>Collective risk <span class="sub">across all agents</span></h2>
+      <div class="hero-row">
+        <div class="hero-num" id="risk-num">0</div>
+        <div class="hero-label">
+          <div class="level" id="risk-level"></div>
+          <div class="hint">of 100</div>
+        </div>
+      </div>
+      <div class="chart-wrap" id="risk-chart-wrap">
+        <svg id="risk-chart" role="img" aria-label="Collective risk score over time"></svg>
+        <div class="tooltip" id="risk-tip"></div>
+      </div>
+      <div class="signals" id="signals"></div>
+    </section>
+
+    <section class="panel" id="roster">
+      <h2>Agents <span class="sub" id="roster-sub"></span></h2>
+      <div class="roster" id="roster-list"></div>
+    </section>
+
+    <section class="panel" id="graph">
+      <h2>Agent correlation graph <span class="sub">who touches what, live</span></h2>
+      <svg id="net" role="img" aria-label="Graph of agents and the resources they access"></svg>
+      <div class="legend">
+        <span><b style="background: var(--series-1)"></b>Agent</span>
+        <span><b style="background: var(--neutral-mark)"></b>Resource</span>
+        <span><b style="background: var(--critical)"></b>Sensitive hotspot</span>
+        <span><i style="border-color: var(--neutral-mark)"></i>Read</span>
+        <span><i style="border-color: var(--series-1)"></i>Write</span>
+        <span><i style="border-color: var(--critical)"></i>Write to sensitive hotspot</span>
+      </div>
+    </section>
+
+    <section class="panel" id="ai">
+      <h2>Equinix AI Engine analysis <span class="sub">WatchTower agent</span></h2>
+      <div class="ai-status" id="ai-status"><span class="dot"></span>Waiting for risk to cross the analysis threshold</div>
+      <div class="ai-body" id="ai-body"></div>
+    </section>
+
+    <section id="compare">
+      <div class="panel feed-panel">
+        <h2>Today: per-interaction guardrails <span class="sub">each event checked alone</span></h2>
+        <div class="feed" id="feed-guard"></div>
+      </div>
+      <div class="panel feed-panel">
+        <h2>WatchTower: cross-agent view <span class="sub">patterns across agents</span></h2>
+        <div class="feed" id="feed-wt"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>&copy; 2026 Equinix, Inc. Fabric API calls in this prototype are simulated.</footer>
+
+  <div class="director" id="director">
+    <label>Speed
+      <select id="speed"><option>1</option><option selected>1.5</option><option>2</option><option>3</option></select>
+    </label>
+    <button id="btn-run">Run scenario</button>
+    <button id="btn-reset">Reset</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

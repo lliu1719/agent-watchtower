@@ -72,6 +72,19 @@ async def run_agent(client: httpx.AsyncClient, agent_id: str, steps: list[dict],
     print(f"{DIM}{agent_id}  done{RESET}")
 
 
+async def run(client: httpx.AsyncClient, scenario: dict, speed: float = 1.0, seed: int = 7, reset: bool = True):
+    """Register the scenario's agents and replay every agent's timeline concurrently."""
+    timeline = build_timeline(scenario, random.Random(seed))
+    if reset:
+        await client.post("/api/reset")
+    await client.post("/api/agents/register", json={"agents": [
+        {k: a[k] for k in ("agent_id", "declared_task", "owner")} for a in scenario["agents"]]})
+    print(f"▶ {scenario['name']}: {len(timeline)} agents, {scenario['duration_s']}s at {speed}x\n")
+    t0 = time.monotonic()
+    await asyncio.gather(*(run_agent(client, aid, steps, COLORS[i % len(COLORS)], t0, speed)
+                           for i, (aid, steps) in enumerate(timeline.items())))
+
+
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default="http://localhost:8000")
@@ -82,17 +95,8 @@ async def main():
     args = ap.parse_args()
 
     scenario = json.loads(Path(args.scenario).read_text())
-    timeline = build_timeline(scenario, random.Random(args.seed))
-
     async with httpx.AsyncClient(base_url=args.backend, timeout=30) as client:
-        if not args.no_reset:
-            await client.post("/api/reset")
-        await client.post("/api/agents/register", json={"agents": [
-            {k: a[k] for k in ("agent_id", "declared_task", "owner")} for a in scenario["agents"]]})
-        print(f"▶ {scenario['name']}: {len(timeline)} agents, {scenario['duration_s']}s at {args.speed}x\n")
-        t0 = time.monotonic()
-        await asyncio.gather(*(run_agent(client, aid, steps, COLORS[i % len(COLORS)], t0, args.speed)
-                               for i, (aid, steps) in enumerate(timeline.items())))
+        await run(client, scenario, args.speed, args.seed, reset=not args.no_reset)
 
 
 if __name__ == "__main__":

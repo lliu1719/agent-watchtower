@@ -4,6 +4,7 @@ Run:  .venv/bin/uvicorn watchtower.app:app --app-dir backend --port 8000
 """
 
 import asyncio
+import importlib.util
 import json
 import logging
 import os
@@ -15,6 +16,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+import httpx
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
@@ -27,6 +30,14 @@ ANALYZE_THRESHOLD = int(os.getenv("ANALYZE_THRESHOLD", "80"))
 REANALYZE_DELTA = int(os.getenv("REANALYZE_DELTA", "15"))
 AUTO_CONTAIN = os.getenv("AUTO_CONTAIN", "true").lower() == "true"
 WINDOW_EVENTS = int(os.getenv("WINDOW_EVENTS", "80"))
+
+ROOT = Path(__file__).resolve().parents[2]
+SCENARIO = ROOT / "simulator" / "scenario_dependency.json"
+
+# Load the CLI simulator as a module so the dashboard's "Run scenario" replays the exact same timeline.
+_spec = importlib.util.spec_from_file_location("simulator", ROOT / "simulator" / "simulator.py")
+simulator = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(simulator)
 
 app = FastAPI(title="Equinix Agent WatchTower")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -63,9 +74,12 @@ class State:
             "analyzing": self.analyzing,
             "incident": self.incident,
             "ai_engine_mode": os.getenv("AI_ENGINE_MODE", "live"),
+            "analyze_threshold": ANALYZE_THRESHOLD,
+            "scenario_running": bool(scenario_task and not scenario_task.done()),
         }
 
 
+scenario_task: asyncio.Task | None = None
 state = State()
 subscribers: set[asyncio.Queue] = set()
 
@@ -238,12 +252,43 @@ async def approve_restore():
     return {"vc_state": state.vc_state}
 
 
+def _stop_scenario() -> None:
+    if scenario_task and not scenario_task.done():
+        scenario_task.cancel()
+
+
 @app.post("/api/reset")
 async def reset():
     global state
+    _stop_scenario()
     state = State()
     publish("reset", state.snapshot())
     return {"reset": True}
+
+
+@app.post("/api/scenario/run")
+async def run_scenario(body: dict | None = None):
+    """Director control: reset, then replay the demo scenario in-process (no port assumptions)."""
+    global scenario_task
+    speed = float((body or {}).get("speed", 1.0))
+    await reset()
+    scenario = json.loads(SCENARIO.read_text())
+
+    async def replay():
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://watchtower", timeout=30) as client:
+                await simulator.run(client, scenario, speed=speed, reset=False)
+        except asyncio.CancelledError:
+            log.info("scenario cancelled")
+            raise
+        except Exception:
+            log.exception("scenario failed")
+        finally:
+            publish("scenario", {"running": False})
+
+    scenario_task = asyncio.create_task(replay())
+    publish("scenario", {"running": True, "name": scenario["name"], "speed": speed})
+    return {"started": scenario["name"], "speed": speed}
 
 
 @app.get("/api/state")
@@ -269,3 +314,7 @@ async def stream(request: Request):
             subscribers.discard(q)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+# Dashboard last, so /api/* routes take precedence over static files.
+app.mount("/", StaticFiles(directory=ROOT / "dashboard", html=True), name="dashboard")
