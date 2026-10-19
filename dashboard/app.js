@@ -50,8 +50,7 @@ const S = {
   risk: 0,
   signals: [],
   hotspots: [],
-  vcState: 'UP',
-  vcId: '',
+  vcs: [],
   analysis: null,
   analyzing: false,
   incident: null,
@@ -60,12 +59,15 @@ const S = {
   scenarioRunning: false,
 };
 let evtSource = null;
-let renderedAnalysis;  // undefined = AI panel body must be redrawn
+let renderedAnalysis;
+let seenActions = 0;   // incident.actions already written to the WatchTower feed  // undefined = AI panel body must be redrawn
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 const el = (id) => document.getElementById(id);
+// The UI scales with the root font size (see styles.css); SVGs are drawn in unscaled units and stretched by viewBox.
+const uiScale = () => parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
 
 function esc(s) {
   if (s == null) return '';
@@ -198,11 +200,13 @@ function handle(msg) {
       S.agents.set(d.agent_id, d);
       schedule(renderRoster, renderGraph);
       break;
-    case 'vc':
-      if (d !== S.vcState) wt(msg.ts, 'Fabric VC', d === 'DOWN' ? `${S.vcId} deleted; agents lose the model endpoint` : `${S.vcId} restored`);
-      S.vcState = d;
-      schedule(renderTopbar);
+    case 'vcs': {
+      const was = new Map(S.vcs.map(v => [v.vc_id, v.state]));
+      for (const v of d) if (was.get(v.vc_id) === 'DOWN' && v.state === 'UP') wt(msg.ts, 'Fabric VC restored', v.vc_id);
+      S.vcs = d;
+      schedule(renderTopbar, renderRoster, renderGraph);
       break;
+    }
     case 'scenario':
       S.scenarioRunning = d.running;
       if (d.running) wt(msg.ts, 'Scenario', `${d.name} started at ${d.speed}x`);
@@ -218,8 +222,7 @@ function applySnapshot(d) {
   S.risk = d.risk_score || 0;
   S.signals = d.signals || [];
   S.hotspots = d.hotspots || [];
-  S.vcState = d.vc_state || 'UP';
-  S.vcId = d.vc_id || '';
+  S.vcs = d.vcs || [];
   S.analysis = d.analysis || null;
   S.analyzing = !!d.analyzing;
   S.incident = d.incident || null;
@@ -233,7 +236,8 @@ function applySnapshot(d) {
   S.events.forEach(e => addGuardLine(e, false));
   S.signals.forEach(s => wt(null, SIGNAL_NAMES[s.type] || s.type, s.detail));
   if (S.analysis) wt(null, 'AI Engine verdict', `${S.analysis.verdict} · ${S.analysis.risk_level}`);
-  if (S.incident) wt(S.incident.opened_at, 'Containment', S.incident.action);
+  seenActions = 0;
+  if (S.incident) logActions(S.incident, false);
 
   schedule(renderTopbar, renderIncident, renderRisk, renderRoster, renderGraph, renderAnalysis, renderDirector);
 }
@@ -260,14 +264,23 @@ function onRisk(d, ts) {
 
 function onIncident(d, ts) {
   const was = S.incident;
+  if (!was || was.opened_at !== d.opened_at) seenActions = 0;
   S.incident = d;
-  if (!was || was.opened_at !== d.opened_at) {
-    wt(ts, 'Containment', d.action === 'KILL_SWITCH'
-      ? `Kill switch: Fabric VC ${S.vcId} DELETE issued`
-      : `Gateway access revoked for ${d.involved_agents.join(', ') || 'involved agents'}`);
-  }
+  logActions(d, true);
   if (d.status === 'resolved' && was?.status !== 'resolved') wt(ts, 'Human review', 'Restore approved');
-  schedule(renderIncident, renderTopbar);
+  schedule(renderIncident, renderTopbar, renderRoster);
+}
+
+function logActions(inc, live) {
+  for (const act of inc.actions.slice(seenActions)) {
+    const by = act.by === 'auto' ? 'auto' : 'operator';
+    if (act.type === 'cut_vc') {
+      wt(live ? act.ts : null, 'Fabric VC cut', `${act.target} (${by}) · DELETE → ${act.fabric.response.state}${act.fabric.simulated ? ' (simulated)' : ''}`);
+    } else {
+      wt(live ? act.ts : null, 'Agent isolated', `${act.target} revoked at AI Gateway (${by})${act.reason ? `: ${act.reason}` : ''}`);
+    }
+  }
+  seenActions = inc.actions.length;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,12 +315,11 @@ function wt(ts, label, text) {
 // Top bar + incident banner
 // ─────────────────────────────────────────────────────────────────────────────
 function renderTopbar() {
-  const up = S.vcState === 'UP';
-  el('vc-dot').className = `dot ${up ? 'good' : 'critical'}`;
-  el('vc-id').textContent = S.vcId;
-  el('vc-state').textContent = S.vcState;
+  const up = S.vcs.filter(v => v.state === 'UP').length, total = S.vcs.length;
+  el('vc-dot').className = `dot ${up === total ? 'good' : up === 0 ? 'critical' : 'warning'}`;
+  el('vc-state').textContent = total ? `${up} of ${total} UP` : '-';
   el('ai-mode').textContent = S.mode;
-  el('btn-kill').disabled = !up || S.incident?.status === 'pending_review';
+  el('btn-kill').disabled = up === 0;
 }
 
 function renderIncident() {
@@ -316,16 +328,26 @@ function renderIncident() {
   box.className = 'incident' + (inc ? ' show' : '') + (inc?.status === 'resolved' ? ' resolved' : '');
   if (!inc) return;
 
-  const agents = inc.involved_agents.length ? inc.involved_agents.join(', ') : 'all agents';
+  const cut = inc.actions.filter(x => x.type === 'cut_vc').map(x => x.target);
+  const isolated = inc.actions.filter(x => x.type === 'isolate_agent').map(x => x.target);
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const scope = [cut.length && `${plural(cut.length, 'Fabric VC')} cut`, isolated.length && `${plural(isolated.length, 'agent')} isolated`].filter(Boolean).join(', ');
+
   if (inc.status === 'resolved') {
     el('incident-title').textContent = '✓ Incident resolved after human review';
-    el('incident-meta').textContent = `Opened ${fmtTime(inc.opened_at)} · resolved ${fmtTime(inc.resolved_at)} · ${agents} quarantined pending follow-up`;
+    el('incident-meta').textContent = `Opened ${fmtTime(inc.opened_at)} · resolved ${fmtTime(inc.resolved_at)} · all VCs restored, affected agents quarantined pending follow-up`;
   } else {
-    el('incident-title').textContent = inc.action === 'KILL_SWITCH'
-      ? `✖ Kill switch engaged: Fabric VC ${S.vcId} deleted`
-      : `▲ Agents contained: gateway access revoked`;
-    const parts = [`Opened ${fmtTime(inc.opened_at)}`, `Agents: ${agents}`];
-    if (inc.fabric) parts.push(`${inc.fabric.request.method} ${inc.fabric.request.url} → ${inc.fabric.response.state}${inc.fabric.simulated ? ' (simulated)' : ''}`);
+    const titles = {
+      KILL_ALL: `✖ Global kill switch: all ${plural(S.vcs.length, 'Fabric VC')} cut`,
+      KILL_SWITCH: `✖ Targeted kill switch: ${scope}`,
+      CONTAIN_AGENTS: `▲ Agents contained: ${scope}`,
+    };
+    el('incident-title').textContent = titles[inc.trigger] || `▲ Operator containment: ${scope}`;
+    const active = [...S.agents.values()].filter(a => a.status === 'active').map(a => a.agent_id);
+    const parts = [`Opened ${fmtTime(inc.opened_at)}`];
+    if (cut.length) parts.push(`Cut: ${cut.join(', ')}`);
+    if (isolated.length) parts.push(`Isolated at gateway: ${isolated.join(', ')}`);
+    parts.push(active.length ? `Still working: ${active.join(', ')}` : 'No agents running');
     parts.push(inc.notified ? 'Slack notified' : 'Notification logged');
     el('incident-meta').textContent = parts.join(' · ');
   }
@@ -356,7 +378,7 @@ function renderRisk() {
 
 function renderRiskChart() {
   const svg = el('risk-chart');
-  const W = svg.clientWidth || 300, H = 120, pad = 4;
+  const W = (svg.clientWidth || 300) / uiScale(), H = 140, pad = 6;
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   const pts = S.riskHistory;
   const y = (v) => H - pad - (v / 100) * (H - 2 * pad);
@@ -386,7 +408,7 @@ function initRiskTooltip() {
     const i = Math.round(((e.clientX - rect.left) / rect.width) * (pts.length - 1));
     const p = pts[Math.max(0, Math.min(pts.length - 1, i))];
     tip.innerHTML = `${fmtTime(p.ts)} · risk <b>${p.risk}</b>`;
-    tip.style.left = `${e.clientX - rect.left}px`;
+    tip.style.left = `${e.clientX - rect.left}px`;  // tooltip is HTML, so real pixels
     tip.style.top = `${e.clientY - rect.top}px`;
     tip.style.display = 'block';
   });
@@ -398,20 +420,38 @@ function initRiskTooltip() {
 // ─────────────────────────────────────────────────────────────────────────────
 function renderRoster() {
   const flagged = new Set(S.analysis?.involved_agents || []);
-  const agents = [...S.agents.values()].sort((a, b) => a.agent_id.localeCompare(b.agent_id));
+  const agents = [...S.agents.values()];
   const active = agents.filter(a => a.status === 'active').length;
-  el('roster-sub').textContent = agents.length ? `${active} of ${agents.length} active` : '';
-  el('roster-list').innerHTML = agents.length
-    ? agents.map(a => {
-      const st = AGENT_STATUS[a.status] || { cls: '', label: a.status };
-      return `
-        <div class="agent-row${flagged.has(a.agent_id) ? ' flagged' : ''}" title="${esc(a.owner)} · ${a.llm_calls} LLM calls · last: ${esc(a.last_action || 'none')}">
-          <span class="id">${flagged.has(a.agent_id) ? '▲ ' : ''}${esc(a.agent_id)}</span>
-          <span class="task">${esc(a.declared_task)}</span>
-          ${statusTag(st.cls, st.label)}
-        </div>`;
-    }).join('')
-    : '<div class="empty">No agents registered. Press D, then Run scenario.</div>';
+  el('roster-sub').textContent = agents.length ? `${active} of ${agents.length} agents active` : '';
+  if (!agents.length) {
+    el('roster-list').innerHTML = '<div class="empty">No agents registered. Press D, then Run scenario.</div>';
+    return;
+  }
+
+  const agentRow = (a) => {
+    const st = AGENT_STATUS[a.status] || { cls: '', label: a.status };
+    return `
+      <div class="agent-row${flagged.has(a.agent_id) ? ' flagged' : ''}" title="${esc(a.owner)} · ${a.llm_calls} LLM calls · last: ${esc(a.last_action || 'none')}">
+        <span class="id">${flagged.has(a.agent_id) ? '▲ ' : ''}${esc(a.agent_id)}</span>
+        <span class="task">${esc(a.declared_task)}</span>
+        ${statusTag(st.cls, st.label)}
+        <button class="mini" data-isolate="${esc(a.agent_id)}" ${a.status === 'active' ? '' : 'disabled'} title="Revoke this agent's AI Gateway token">Isolate</button>
+      </div>`;
+  };
+  el('roster-list').innerHTML = S.vcs.map(vc => {
+    const down = vc.state === 'DOWN';
+    const rows = vc.agents.map(id => S.agents.get(id)).filter(Boolean).sort((x, y) => x.agent_id.localeCompare(y.agent_id));
+    return `
+      <div class="vc-group">
+        <div class="vc-row${down ? ' down' : ''}" title="${esc(vc.owner)} workloads to the AI Hub">
+          <span class="dot ${down ? 'critical' : 'good'}"></span>
+          <span class="vc-id">${esc(vc.vc_id)}</span>
+          ${statusTag(down ? 'critical' : 'good', down ? 'DOWN' : 'UP')}
+          <button class="mini" data-cut="${esc(vc.vc_id)}" ${down ? 'disabled' : ''} title="Delete this Fabric VC; every agent behind it loses the model">Cut VC</button>
+        </div>
+        ${rows.map(agentRow).join('')}
+      </div>`;
+  }).join('');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -419,7 +459,8 @@ function renderRoster() {
 // ─────────────────────────────────────────────────────────────────────────────
 function renderGraph() {
   const svg = el('net');
-  const W = svg.clientWidth || 600, H = Math.max(svg.clientHeight, 520);
+  const u = uiScale();
+  const W = (svg.clientWidth || 600) / u, H = Math.max(svg.clientHeight / u, 640);
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
   const recent = S.events.slice(-WINDOW_EVENTS);
@@ -436,7 +477,10 @@ function renderGraph() {
     touches.get(e.resource).add(e.agent_id);
   }
 
-  const agentIds = [...new Set([...S.agents.keys(), ...recent.map(e => e.agent_id)])].sort();
+  // Order agents by VC so each team's connection reads as one block.
+  const vcOf = (id) => S.agents.get(id)?.vc_id || '';
+  const agentIds = [...new Set([...S.agents.keys(), ...recent.map(e => e.agent_id)])]
+    .sort((x, y) => vcOf(x).localeCompare(vcOf(y)) || x.localeCompare(y));
   const resources = [...touches.keys()]
     .sort((a, b) => (sensitiveHotspot(b) - sensitiveHotspot(a)) || (touches.get(b).size - touches.get(a).size) || a.localeCompare(b))
     .slice(0, MAX_GRAPH_RESOURCES);
@@ -446,8 +490,9 @@ function renderGraph() {
     return;
   }
 
-  const ax = Math.min(150, W * 0.22), rx = W - Math.min(230, W * 0.35);
-  const spread = (n, i) => n === 1 ? H / 2 : 30 + (i * (H - 60)) / (n - 1);
+  // Leave room for labels: agent ids on the left, resource paths on the right.
+  const ax = Math.min(130, W * 0.2), rx = W - Math.min(280, W * 0.4);
+  const spread = (n, i) => n === 1 ? H / 2 : 36 + (i * (H - 72)) / (n - 1);
   const apos = new Map(agentIds.map((id, i) => [id, spread(agentIds.length, i)]));
   const rpos = new Map(resources.map((r, i) => [r, spread(resources.length, i)]));
   const flagged = new Set(S.analysis?.involved_agents || []);
@@ -469,9 +514,9 @@ function renderGraph() {
     const y = apos.get(id);
     nodes += `
       <g opacity="${down ? 0.45 : 1}">
-        ${flagged.has(id) ? `<circle cx="${ax}" cy="${y}" r="12" fill="none" style="stroke:var(--critical)" stroke-width="2"/>` : ''}
-        <circle cx="${ax}" cy="${y}" r="7" style="fill:var(--series-1)"/>
-        <text x="${ax - 16}" y="${y + 4}" text-anchor="end" class="node-label${flagged.has(id) ? ' strong' : ''}">${esc(id)}${down ? ' ✖' : ''}</text>
+        ${flagged.has(id) ? `<circle cx="${ax}" cy="${y}" r="14" fill="none" style="stroke:var(--critical)" stroke-width="2"/>` : ''}
+        <circle cx="${ax}" cy="${y}" r="9" style="fill:var(--series-1)"/>
+        <text x="${ax - 20}" y="${y + 5}" text-anchor="end" class="node-label${flagged.has(id) ? ' strong' : ''}">${esc(id)}${down ? ' ✖' : ''}</text>
       </g>`;
   }
   for (const r of resources) {
@@ -479,8 +524,8 @@ function renderGraph() {
     const n = touches.get(r).size;
     const y = rpos.get(r);
     nodes += `
-      <circle cx="${rx}" cy="${y}" r="${Math.min(14, 5 + n * 1.2)}" style="fill:var(${hot ? '--critical' : '--neutral-mark'})"/>
-      <text x="${rx + 18}" y="${y + 4}" class="node-label${hot ? ' strong' : ''}">${esc(r)} <tspan opacity="0.7">· ${n}</tspan></text>`;
+      <circle cx="${rx}" cy="${y}" r="${Math.min(16, 6 + n * 1.4)}" style="fill:var(${hot ? '--critical' : '--neutral-mark'})"/>
+      <text x="${rx + 22}" y="${y + 5}" class="node-label${hot ? ' strong' : ''}">${esc(r)} <tspan opacity="0.7">· ${n}</tspan></text>`;
   }
   svg.innerHTML = lines + nodes;
 }
@@ -543,7 +588,14 @@ function renderDirector() {
 
 function initControls() {
   el('btn-kill').addEventListener('click', () => {
-    if (confirm(`Engage the kill switch? This deletes Fabric VC ${S.vcId} and cuts every agent off from the model.`)) post('/api/killswitch');
+    const ids = S.vcs.filter(v => v.state === 'UP').map(v => v.vc_id);
+    if (confirm(`Global kill switch: delete ${ids.length} Fabric VCs (${ids.join(', ')}) and cut every agent off from the model?`)) post('/api/killswitch');
+  });
+  el('roster-list').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    if (b.dataset.isolate) post(`/api/agents/${encodeURIComponent(b.dataset.isolate)}/isolate`);
+    if (b.dataset.cut && confirm(`Cut Fabric VC ${b.dataset.cut}? Every agent behind it loses the model.`)) post(`/api/vcs/${encodeURIComponent(b.dataset.cut)}/cut`);
   });
   el('btn-approve').addEventListener('click', () => post('/api/review/approve'));
   el('btn-run').addEventListener('click', () => post('/api/scenario/run', { speed: parseFloat(el('speed').value) }));

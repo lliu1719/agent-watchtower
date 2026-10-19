@@ -4,20 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Equinix Agent WatchTower</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="wordmark">EQUINIX</span>
-      <span class="product">Agent WatchTower</span>
-      <span class="tagline">Current guardrails inspect prompts. WatchTower inspects agent societies.</span>
+      <img class="logo" src="assets/Equinix_logo_horizontal_wht_RGB.svg" alt="Equinix" height="30">
+      <span class="divider"></span>
+      <div class="titles">
+        <span class="product">Agent WatchTower</span>
+        <span class="tagline">Current guardrails inspect prompts. WatchTower inspects agent societies.</span>
+      </div>
     </div>
     <div class="spacer"></div>
     <span class="pill"><span class="dot" id="live-dot"></span><span id="live-label">Connecting</span></span>
-    <span class="pill"><span class="dot good" id="vc-dot"></span>Fabric VC <span id="vc-id"></span>: <span id="vc-state">UP</span></span>
+    <span class="pill" title="Fabric virtual connections from each team to the AI Hub"><span class="dot good" id="vc-dot"></span>Fabric VCs: <span id="vc-state">-</span></span>
     <span class="pill" title="Where the analysis comes from">AI Engine: <span id="ai-mode">live</span></span>
-    <button class="danger" id="btn-kill" title="Manual kill switch">Kill switch</button>
+    <button class="danger" id="btn-kill" title="Last resort: delete every Fabric VC to the AI Hub">Kill all VCs</button>
   </header>
 
   <div class="incident" id="incident">
@@ -47,7 +50,7 @@
     </section>
 
     <section class="panel" id="roster">
-      <h2>Agents <span class="sub" id="roster-sub"></span></h2>
+      <h2>Agents by Fabric VC <span class="sub" id="roster-sub"></span></h2>
       <div class="roster" id="roster-list"></div>
     </section>
 
@@ -82,7 +85,11 @@
     </section>
   </main>
 
-  <footer>&copy; 2026 Equinix, Inc. Fabric API calls in this prototype are simulated.</footer>
+  <footer>
+    <span>&copy; 2026 Equinix, Inc. Fabric API calls in this prototype are simulated.</span>
+    <span class="spacer"></span>
+    <img class="fortress" src="assets/Equinix_fortress_white_RGB.svg" alt="" height="22">
+  </footer>
 
   <div class="director" id="director">
     <label>Speed
@@ -90,8 +97,9 @@
     </label>
     <button id="btn-run">Run scenario</button>
     <button id="btn-reset">Reset</button>
+    <a href="scenario.html" target="_blank">Scenario diagram</a>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
