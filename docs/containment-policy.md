@@ -12,6 +12,8 @@ Applied by the WatchTower backend, not by the AI Engine agent. The agent only re
 
 Applies to every AI agent whose LLM traffic passes through the Equinix AI Gateway and Equinix Fabric virtual connections (VCs) in the Distributed AI Hub.
 
+Each owning team reaches the AI Hub over its own Fabric VC (default `vc-ai-hub-<team>`, override with `FABRIC_VCS`). So there are two independent switches per agent: its AI Gateway token, and its team's VC.
+
 ## 2. Sensitive resources
 Coordinated access to any of the following raises severity by one level:
 - Scoring, grading, evaluation, or ranking data (e.g. `scoring/`, `judges/`, leaderboards)
@@ -26,8 +28,15 @@ Coordinated access to any of the following raises severity by one level:
 |---|---|---|---|
 | MONITOR | Log only | Automatic | n/a |
 | ALERT | Slack + email to agent owners and SecOps | Automatic | n/a |
-| CONTAIN_AGENTS | Revoke AI Gateway tokens of listed agents | Automatic | Owner + SecOps approval |
-| KILL_SWITCH | Delete the Fabric VC to the LLM endpoint; all agents behind it lose model access | Automatic when policy 4 is met | SecOps approval in AI Engine Approvals |
+| CONTAIN_AGENTS | Revoke AI Gateway tokens of the involved agents | Automatic | Owner + SecOps approval |
+| KILL_SWITCH (targeted) | Narrowest blast radius: delete a team's Fabric VC only if **every** agent on it is involved; involved agents that share a VC with uninvolved ones are revoked at the AI Gateway instead, so the uninvolved agents keep working | Automatic when policy 4 is met | SecOps approval in AI Engine Approvals |
+| Isolate agent | Revoke one agent's AI Gateway token | Operator (dashboard) | SecOps approval |
+| Cut VC | Delete one team's Fabric VC; every agent behind it loses model access | Operator (dashboard) | SecOps approval |
+| Kill all VCs | Delete every Fabric VC to the AI Hub (last resort) | Operator (dashboard) | SecOps approval |
+
+While an incident is open, any still-active agent that writes to one of its target resources is isolated at the AI Gateway on that first write (late joiner), without cutting its VC.
+
+All steps of one incident are recorded in its action log (`incident.actions`: type, target, auto or operator, Fabric call).
 
 ## 4. Kill-switch criteria (all must hold)
 1. Three or more distinct agents are involved.
