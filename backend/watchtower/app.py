@@ -783,7 +783,8 @@ async def reset():
     return {"reset": True}
 
 
-NOTIFY_EMAIL_TO = os.getenv("NOTIFY_EMAIL_TO", "")
+# One address or several, comma-separated: NOTIFY_EMAIL_TO=a@equinix.com,b@equinix.com
+NOTIFY_EMAIL_TO = ", ".join(a.strip() for a in os.getenv("NOTIFY_EMAIL_TO", "").split(",") if a.strip())
 EMAIL_PICKUP_S = 90  # an email the bridge has not taken by then is reported as not sent
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "https://agent-watchtower.solutionvalidation.center")
 TIER_LABELS = {"info": "Info", "watch": "Watch", "revoke": "Revoke key", "cut": "Cut VC"}
