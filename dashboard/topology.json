@@ -1,0 +1,30 @@
+{
+  "_note": "Where things sit on the map view. Edit metros and team_sites to match the real deployment; WatchTower draws one Fabric VC per entry in /api/state vcs, from the owning team's site to the AI Gateway. Optional \"label\" per metro (left, right, above, below) sets which side its text goes.",
+  "metros": {
+    "CH": {"name": "Chicago", "lat": 41.88, "lon": -87.63, "label": "left"},
+    "DC": {"name": "Ashburn", "lat": 39.04, "lon": -77.49, "label": "below"},
+    "NY": {"name": "New York", "lat": 40.71, "lon": -74.01, "label": "above"},
+    "AT": {"name": "Atlanta", "lat": 33.75, "lon": -84.39, "label": "below"},
+    "DA": {"name": "Dallas", "lat": 32.78, "lon": -96.8, "label": "left"},
+    "DE": {"name": "Denver", "lat": 39.74, "lon": -104.99},
+    "SV": {"name": "Silicon Valley", "lat": 37.34, "lon": -121.89, "label": "below"},
+    "LA": {"name": "Los Angeles", "lat": 34.05, "lon": -118.24},
+    "SE": {"name": "Seattle", "lat": 47.61, "lon": -122.33, "label": "right"}
+  },
+  "gateway": {"metro": "CH", "label": "AI Gateway (LiteLLM)"},
+  "llm_endpoints": [
+    {"metro": "DC", "label": "LLM endpoint"},
+    {"metro": "SV", "label": "LLM endpoint"}
+  ],
+  "team_sites": {
+    "team-docs": "SE",
+    "team-research": "NY",
+    "team-eng": "DA",
+    "team-qa": "AT",
+    "watchtower-demo": "DA",
+    "wt-sec": "NY",
+    "wt-dev": "DA",
+    "wt-cs": "SE"
+  },
+  "default_site": "CH"
+}

@@ -37,3 +37,29 @@ base, otherwise AI Engine routes it to Legal review (15–20 business days).
 Paste `test-payload.json` into the agent chat. Expected: `verdict=COORDINATED_THREAT`,
 `risk_level=CRITICAL`, `coordination_channel=hackathon-2026/notes/plan.md`,
 and e-007 flagged as `prompt_injection_attempt`.
+
+## Custom tool rules (enforced by AI Engine at publish time)
+
+Custom tools only compute on their arguments:
+- No I/O imports (`socket`, `ssl`, `urllib`, …). To bring data in, attach a **connector**,
+  **knowledge**, or a **workflow tool**; the custom tool receives that output as an argument.
+- No nondeterminism (`time`, `time.monotonic`, randomness). Take the value as a parameter;
+  the platform's `current_datetime` tool can supply the current time.
+- No `*args` / `**kwargs` (`varargs_not_supported`): every parameter is described to the agent,
+  so list each one explicitly. The tool's parameter list in AI Engine must match the `def` line.
+
+So AI Engine cannot pull from WatchTower with a custom tool. Data reaches it either in the
+invoke message (WatchTower pushes the window) or through a connector / workflow tool.
+
+## Connectivity probe: `watchtower_probe`
+
+`tools/watchtower_probe.py` follows the rules above: a **workflow tool or connector** does
+`GET https://agent-watchtower.solutionvalidation.center/api/state` (Basic Auth from the
+nginx-proxy-manager access list) and passes its result in; the custom tool only classifies it.
+
+Arguments: `http_status`, `body` (text or parsed JSON), `server` (Server header), `error`
+(transport error). Returns `{ok, outcome, http_status, detail, watchtower}` where `outcome` is
+`reachable`, `blocked_by_proxy`, `auth_required`, `http_error`, `not_watchtower`,
+`dns_failure`, `timeout`, `connection_refused`, `tls_error` or `network_error`.
+
+Test cases: `tools/tests/watchtower_probe_cases.json` (main case `reachable_mid_incident`).

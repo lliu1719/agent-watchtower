@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Equinix Agent WatchTower</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
   <header class="topbar">
@@ -55,7 +55,24 @@
     </section>
 
     <section class="panel" id="graph">
-      <h2>Agent correlation graph <span class="sub">who touches what, live</span></h2>
+      <h2>
+        <span id="graph-title">Events</span> <span class="sub" id="graph-sub">what WatchTower noticed, in plain words</span>
+        <span class="tabs" role="tablist">
+          <button class="tab active" role="tab" data-view="events" aria-selected="true">Events</button>
+          <button class="tab" role="tab" data-view="graph" aria-selected="false">Graph</button>
+          <button class="tab" role="tab" data-view="map" aria-selected="false">Map</button>
+        </span>
+      </h2>
+      <div class="view" id="view-events">
+        <div class="events" id="events-list"></div>
+        <div class="legend">
+          <span><b style="background: var(--neutral-mark)"></b>Info</span>
+          <span><b style="background: var(--warning)"></b>Watch: flagged, nothing blocked</span>
+          <span><b style="background: var(--serious)"></b>Revoke key: one agent stopped</span>
+          <span><b style="background: var(--critical)"></b>Cut VC: a team loses the model</span>
+        </div>
+      </div>
+      <div class="view" id="view-graph" hidden>
       <svg id="net" role="img" aria-label="Graph of agents and the resources they access"></svg>
       <div class="legend">
         <span><b style="background: var(--series-1)"></b>Agent</span>
@@ -65,10 +82,26 @@
         <span><i style="border-color: var(--series-1)"></i>Write</span>
         <span><i style="border-color: var(--critical)"></i>Write to sensitive hotspot</span>
       </div>
+      </div>
+      <div class="view" id="view-map" hidden>
+        <div class="map-wrap">
+          <svg id="map" role="img" aria-label="Map of Fabric virtual connections from each team's site to the AI Gateway"></svg>
+          <div class="tooltip" id="map-tip"></div>
+        </div>
+        <div class="legend">
+          <span><b style="background: var(--eq-hero-accent)"></b>AI Gateway</span>
+          <span><b style="background: var(--series-1)"></b>Team site (agents)</span>
+          <span><b style="background: var(--neutral-mark)"></b>LLM endpoint</span>
+          <span><i style="border-color: var(--series-1)"></i>Fabric VC up (dots = live LLM calls)</span>
+          <span><i style="border-color: var(--critical); border-top-style: dashed"></i>Fabric VC cut</span>
+        </div>
+      </div>
     </section>
 
     <section class="panel" id="ai">
-      <h2>Equinix AI Engine analysis <span class="sub">WatchTower agent</span></h2>
+      <h2>Event details <span class="sub">and what you can do</span></h2>
+      <div class="detail" id="event-detail"></div>
+      <h2 class="h2-sep">Equinix AI Engine analysis <span class="sub">WatchTower agent</span></h2>
       <div class="ai-status" id="ai-status"><span class="dot"></span>Waiting for risk to cross the analysis threshold</div>
       <div class="ai-body" id="ai-body"></div>
     </section>
@@ -91,7 +124,12 @@
     <img class="fortress" src="assets/Equinix_fortress_white_RGB.svg" alt="" height="22">
   </footer>
 
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
   <div class="director" id="director">
+    <label>Scenario
+      <select id="scenario"><option value="collusion">Collusion</option></select>
+    </label>
     <label>Speed
       <select id="speed"><option>1</option><option selected>1.5</option><option>2</option><option>3</option></select>
     </label>
@@ -100,6 +138,9 @@
     <a href="scenario.html" target="_blank">Scenario diagram</a>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="vendor/d3-array.min.js"></script>
+  <script src="vendor/d3-geo.min.js"></script>
+  <script src="vendor/topojson-client.min.js"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

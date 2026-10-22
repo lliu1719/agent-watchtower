@@ -7,9 +7,10 @@ services:
     environment:
       AI_ENGINE_MODE: ${AI_ENGINE_MODE:-live}
     ports:
-      - "8090:8000"
+      - "127.0.0.1:8090:8000"   # reachable only via nginx-proxy-manager (access list), not directly from outside
     volumes:
       - ./backend/recordings:/app/backend/recordings
+      - ./backend/data:/app/backend/data   # SQLite span/event log (watchtower.db)
     networks:
       - default
       - npm

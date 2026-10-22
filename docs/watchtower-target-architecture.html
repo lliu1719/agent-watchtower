@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WatchTower Target Architecture</title>
+<style>
+/* Layout: one 16:9 slide (1920x1080), scaled to the window; a gradient title band over a light diagram field. */
+:root {
+  --eq-hero-primary: #460267;   /* Equinix Purple/Blue colorway */
+  --eq-hero-mid: #2936A8;
+  --eq-hero-accent: #115CD3;
+  --eq-content-tint: #F0E4FC;
+  --eq-white: #FFFFFF;
+  --eq-bg-light: #F5F5F5;
+  --eq-text-dark: #1A1A1A;
+  --eq-border: #D0D0D0;
+  --font: Arial, Helvetica, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #2a2a2a; font-family: var(--font); }
+body { display: grid; place-items: center; padding: 16px; }
+.slide { width: 1920px; height: 1080px; background: var(--eq-bg-light); position: relative; overflow: hidden; transform-origin: center; flex: none; }
+.band { height: 172px; padding: 40px 72px 0; background: linear-gradient(45deg, var(--eq-hero-primary) 0%, var(--eq-hero-mid) 55%, var(--eq-hero-accent) 100%); color: var(--eq-white); display: flex; align-items: flex-start; justify-content: space-between; }
+.band h1 { margin: 0; font-size: 50px; line-height: 1.15; }
+.band p { margin: 10px 0 0; font-size: 24px; opacity: 0.92; }
+.band img { height: 40px; margin-top: 10px; }
+svg { display: block; position: absolute; left: 0; top: 172px; }
+.foot { position: absolute; left: 72px; right: 72px; bottom: 26px; display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; color: #555; }
+.foot b { font-size: 26px; color: var(--eq-hero-primary); }
+@media print { body { background: none; padding: 0; } .slide { transform: none !important; } }
+</style>
+</head>
+<body>
+<div class="slide" id="slide">
+  <div class="band">
+    <div>
+      <h1>Equinix Agent WatchTower</h1>
+      <p>Sees every agent call, decides the tier, and pulls the plug on the network when it has to.</p>
+    </div>
+    <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI4LjEuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAzMjE3LjU1IDQ3MC40NSIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgMzIxNy41NSA0NzAuNDU7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4KPHN0eWxlIHR5cGU9InRleHQvY3NzIj4KCS5zdDB7ZmlsbDojRkZGRkZGO30KPC9zdHlsZT4KPGc+Cgk8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjEwODEuNTYsMjQ4LjcyIDExODguNDQsMjQ4LjcyIDExODguNDQsMjE4LjcxIDEwODEuNTYsMjE4LjcxIDEwODEuNTYsMTUzLjk5IDEyNDAuOTcsMTUzLjk5IAoJCTEyNDAuOTcsMTI0LjEyIDEwNDkuMjMsMTI0LjEyIDEwNDkuMjMsMzUyLjU0IDEyNDYuNTksMzUyLjU0IDEyNDYuNTksMzIzLjA3IDEwODEuNTYsMzIzLjA3IAkiLz4KCTxnPgoJCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0xOTI0LjkzLDI2MS41MmMwLDQwLjgyLTI2LjE2LDY3LjgtNjUuMDIsNjcuOGMtMzcuNywwLTYxLjI5LTI3LjMtNjEuMjktNjcuOFYxMjQuN2gtMzJ2MTM4LjM1CgkJCWMwLDYyLjMsNDMuNTMsOTYuMjUsOTMuMDcsOTYuMjVjNzMuMTMsMCw5Ni45MS01MS42LDk2LjkxLTk2LjI1VjEyNC43aC0zMS42N1YyNjEuNTJ6Ii8+Cgk8L2c+Cgk8cmVjdCB4PSIyMTM0LjY1IiB5PSIxMjQuMTIiIGNsYXNzPSJzdDAiIHdpZHRoPSIzMS43NSIgaGVpZ2h0PSIyMjguNDUiLz4KCTxwb2x5Z29uIGNsYXNzPSJzdDAiIHBvaW50cz0iMjU0NS40MSwzMDMuMTEgMjM4OC40OCwxMjQuMTIgMjM1Ny4xLDEyNC4xMiAyMzU3LjEsMzUyLjU0IDIzODguODEsMzUyLjU0IDIzODguODEsMTcyLjEgCgkJMjU0Ni4wNSwzNTIuNTQgMjU3Ny4wMiwzNTIuNTQgMjU3Ny4wMiwxMjQuMTIgMjU0NS40MSwxMjQuMTIgCSIvPgoJPHJlY3QgeD0iMjc2OS41NiIgeT0iMTI0LjEyIiBjbGFzcz0ic3QwIiB3aWR0aD0iMzEuNzIiIGhlaWdodD0iMjI4LjQ1Ii8+Cgk8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjMxMDkuOTQsMjI4LjU4IDMyMDIuMDMsMTIzLjg3IDMxNjIuODksMTIzLjg3IDMwODkuNzksMjA1Ljk4IDMwMTguNjgsMTIzLjg3IDI5NzcuMjMsMTIzLjg3IAoJCTMwNjYuMDcsMjI4LjY1IDI5NTQuOTUsMzUyLjUgMjk5NS41NCwzNTIuNSAzMDg2LjY0LDI1MC44MiAzMTczLjUzLDM1Mi41IDMyMTcuNTUsMzUyLjUgCSIvPgoJPGc+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTE1NzIuNjksMjM4LjJjMCwzMi4yNS0xMC4wOSw1My4yNi0yOC41Myw3MS4ybC0xNy4yLTIwLjU3bC0zNi44MS0wLjA0bDMwLjE1LDM1Ljc2CgkJCWMtNy4zNiwzLjY1LTIwLjY0LDYuNjItMzAuOTgsNi42OWMtNDcuMzQsMC4zMy04NS4wMy0zOS4xNi04NS4wMy05Mi43OGwtMC4wMi0wLjg3YzAtNTQuNiwzNS4zMS05My4yNSw4Mi45MS05My41MQoJCQljNDcuNjItMC40LDg1LjUyLDM4LjkxLDg1LjUyLDkzLjE1VjIzOC4yeiBNMTQ4Ny44OSwxMTQuODZjLTY1Ljg5LDAuNDMtMTE2LjY5LDUxLjk2LTExNi42OSwxMjMuODV2MC44NwoJCQljMCw3MS40NSw1Mi4wNCwxMjEuNzUsMTE3LjQ2LDEyMS4yOGMxNi44MS0wLjE0LDM2LjY4LTQuNjcsNTEuNTUtMTIuNjJsMTguMDUsMjEuNDRsMzYuOTItMC4wNGwtMzEuNjEtMzcuMzUKCQkJYzI1Ljg2LTIwLjM2LDQyLjE1LTUzLjg4LDQyLjE1LTk1LjI4di0wLjlDMTYwNS43NCwxNjUuMDksMTU1My41MiwxMTQuMzYsMTQ4Ny44OSwxMTQuODYiLz4KCQk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNODUyLjgxLDMzNy4yNGMyNC4wOSwwLDQzLjIxLTE5LjkyLDQzLjIxLTQzLjV2LTAuMjVjMC0yMy42MS0xOC44OC00My4yOC00My4yMS00My4yOAoJCQljLTI0LjEzLDAtNDMuMjcsMTkuOTItNDMuMjcsNDMuNTR2MC4yNUM4MDkuNTQsMzE3LjU3LDgyOC40NCwzMzcuMjQsODUyLjgxLDMzNy4yNCBNODUyLjgxLDMzMi41CgkJCWMtMjEuODcsMC0zOC4yNy0xNy4zOS0zOC4yNy0zOC41MXYtMC4yNWMwLTIxLjE1LDE2LjYzLTM4Ljc2LDM4LjI3LTM4Ljc2YzIxLjg0LDAsMzguMjUsMTcuMzksMzguMjUsMzguNTF2MC4yNQoJCQlDODkxLjA2LDMxNC44Niw4NzQuNDIsMzMyLjUsODUyLjgxLDMzMi41IE04MzQuOTEsMzE1LjM3aDEwLjk0di0xNC4xOGg2Ljk2bDkuNjksMTQuMThoMTMuMTZsLTExLjQxLTE2LjE2CgkJCWM1Ljk2LTEuOTksOS45Mi02LjY5LDkuOTItMTMuOTJjMC0xMC4xNi03LjcyLTE0LjkzLTE4LjE4LTE0LjkzaC0yMS4wOVYzMTUuMzd6IE04NDUuODYsMjkyLjI2di0xMi40NGg5LjQyCgkJCWM0LjcsMCw3LjcyLDIuMjQsNy43Miw2LjIyYzAsMy43My0yLjcyLDYuMjItNy43Miw2LjIySDg0NS44NnoiLz4KCTwvZz4KPC9nPgo8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjM2MC4wMiwwIDI4OC4wMiwyNS4wOCAyODguMDIsNDAyLjgxIDI0MC4wMiwzODYuMTEgMjQwLjAyLDQxLjg4IDk2LjAyLDkyLjE3IDk2LjAyLDMzNS44MiAKCTQ4LjA0LDMxOS4wNSA0OC4wNCwxMDguOSAwLDEyNS43IDAsMzUzLjE2IDE0NC4wMSw0MDMuNDIgMTQ0LjAxLDEyNi4yMyAxOTIuMDQsMTA5LjQ5IDE5Mi4wNCw0MjAuMTkgMzM2LjA0LDQ3MC40NSAzMzYuMDQsNTkuMTkgCgkzNjAuMDIsNTAuODIgMzg0LjAxLDU5LjE5IDM4NC4wMSw0NzAuNDUgNTI4LjA3LDQyMC4xOSA1MjguMDcsMTA5LjQ5IDU3NiwxMjYuMjMgNTc2LDQwMy40MiA3MjAsMzUzLjE2IDcyMCwxMjUuNyA2NzEuOTksMTA4LjkgCgk2NzEuOTksMzE5LjA1IDYyNC4wNCwzMzUuODIgNjI0LjA0LDkyLjE3IDQ4MC4wMSw0MS44OCA0ODAuMDEsMzg2LjExIDQzMS45OCw0MDIuODEgNDMxLjk4LDI1LjA4ICIvPgo8L3N2Zz4K" alt="Equinix">
+  </div>
+
+  <svg width="1920" height="908" viewBox="0 0 1920 908" role="img" aria-label="Agents in three departments reach the AI Gateway over Fabric VCs. The gateway sends OpenTelemetry spans to WatchTower, which works with Equinix AI Engine and contains threats by revoking an agent's key or deleting a Fabric VC.">
+    <defs>
+      <marker id="m-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2936A8"/></marker>
+      <marker id="m-kill" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#460267"/></marker>
+      <marker id="m-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#555"/></marker>
+    </defs>
+    <style>
+      .box { fill: #FFFFFF; stroke: #D0D0D0; stroke-width: 2; }
+      .wt { fill: #F0E4FC; stroke: #460267; stroke-width: 3; }
+      .ae { fill: #FFFFFF; stroke: #115CD3; stroke-width: 3; }
+      .h { font: bold 26px Arial, sans-serif; fill: #1A1A1A; }
+      .s { font: 19px Arial, sans-serif; fill: #3a3a3a; }
+      .lbl { font: bold 17px Arial, sans-serif; fill: #2936A8; letter-spacing: .04em; }
+      .klbl { font: bold 18px Arial, sans-serif; fill: #460267; }
+      .ksub { font: 16px Arial, sans-serif; fill: #460267; }
+      .cap { font: bold 16px Arial, sans-serif; fill: #6a6a6a; letter-spacing: .08em; }
+      .flow { stroke: #2936A8; stroke-width: 4; fill: none; }
+      .vc { stroke: #2936A8; stroke-width: 6; fill: none; stroke-linecap: round; }
+      .kill { stroke: #460267; stroke-width: 4; fill: none; stroke-dasharray: 12 8; }
+      .gray { stroke: #555; stroke-width: 3; fill: none; }
+      .dot { fill: #2936A8; }
+      .tier { fill: #FFFFFF; stroke: #D0D0D0; stroke-width: 2; }
+      .tnum { font: bold 18px Arial, sans-serif; fill: #460267; letter-spacing: .06em; }
+      .tname { font: bold 22px Arial, sans-serif; fill: #1A1A1A; }
+      .tdo { font: 17px Arial, sans-serif; fill: #3a3a3a; }
+    </style>
+
+    <g transform="translate(67,6) scale(0.93)">
+    <!-- column captions -->
+    <text class="cap" x="72" y="52">AI AGENTS</text>
+    <text class="cap" x="610" y="52">EQUINIX FABRIC · AI GATEWAY</text>
+    <text class="cap" x="1160" y="52">MODELS</text>
+    <text class="cap" x="1500" y="52">EQUINIX AI ENGINE</text>
+
+    <!-- departments -->
+    <rect class="box" x="72" y="76" width="340" height="112" rx="14"/>
+    <text class="h" x="96" y="120">Security Research</text>
+    <circle class="dot" cx="106" cy="154" r="10"/><circle class="dot" cx="136" cy="154" r="10"/><circle class="dot" cx="166" cy="154" r="10"/><circle class="dot" cx="196" cy="154" r="10"/>
+    <text class="s" x="222" y="160">4 agents</text>
+
+    <rect class="box" x="72" y="218" width="340" height="112" rx="14"/>
+    <text class="h" x="96" y="262">DevOps</text>
+    <circle class="dot" cx="106" cy="296" r="10"/><circle class="dot" cx="136" cy="296" r="10"/><circle class="dot" cx="166" cy="296" r="10"/><circle class="dot" cx="196" cy="296" r="10"/>
+    <text class="s" x="222" y="302">4 agents</text>
+
+    <rect class="box" x="72" y="360" width="340" height="112" rx="14"/>
+    <text class="h" x="96" y="404">Customer Support</text>
+    <circle class="dot" cx="106" cy="438" r="10"/><circle class="dot" cx="136" cy="438" r="10"/><circle class="dot" cx="166" cy="438" r="10"/>
+    <text class="s" x="192" y="444">3 agents</text>
+
+    <!-- department VCs to the gateway -->
+    <path class="vc" d="M412,132 C520,132 540,200 640,214"/>
+    <path class="vc" d="M412,274 C500,274 560,274 640,274"/>
+    <path class="vc" d="M412,416 C520,416 540,348 640,334"/>
+    <text class="lbl" x="440" y="208">one Fabric VC</text>
+    <text class="lbl" x="440" y="230">per department</text>
+
+    <!-- gateway -->
+    <rect class="box" x="640" y="170" width="380" height="210" rx="16"/>
+    <text class="h" x="666" y="216">AI Gateway (LiteLLM)</text>
+    <text class="s" x="666" y="252">One virtual key per agent</text>
+    <text class="s" x="666" y="282">Routes each call to its model</text>
+    <text class="s" x="666" y="312">Exports every call as</text>
+    <text class="s" x="666" y="338">OpenTelemetry</text>
+
+    <!-- model VCs -->
+    <path class="vc" d="M1020,226 C1090,226 1100,150 1160,150"/>
+    <path class="vc" d="M1020,330 C1090,330 1100,404 1160,404"/>
+
+    <rect class="box" x="1160" y="76" width="290" height="150" rx="14"/>
+    <text class="h" x="1184" y="120">Model zone</text>
+    <text class="s" x="1184" y="156">Primary and backup</text>
+    <text class="s" x="1184" y="184">models, Security</text>
+    <text class="s" x="1184" y="210">Research and DevOps</text>
+
+    <rect class="box" x="1160" y="330" width="290" height="142" rx="14"/>
+    <text class="h" x="1184" y="374">Support model</text>
+    <text class="s" x="1184" y="410">Its own path: keeps</text>
+    <text class="s" x="1184" y="436">serving customers</text>
+    <text class="s" x="1184" y="462">if the zone is cut</text>
+
+    <!-- telemetry down to WatchTower -->
+    <path class="flow" d="M830,380 L830,560" marker-end="url(#m-flow)"/>
+    <text class="lbl" x="846" y="458">every model and</text>
+    <text class="lbl" x="846" y="480">tool call, live</text>
+
+    <!-- WatchTower -->
+    <rect class="wt" x="480" y="566" width="700" height="190" rx="18"/>
+    <text class="h" x="508" y="612" style="font-size:32px">Equinix Agent WatchTower</text>
+    <text class="s" x="508" y="652">Watches the agent society, not one prompt at a time</text>
+    <text class="s" x="508" y="684">Decides the tier: watch, agent, department, zone</text>
+    <text class="s" x="508" y="716">Acts in seconds; a human approves the restore</text>
+
+    <!-- soft kill: key -->
+    <path class="kill" d="M560,566 C560,470 600,420 660,382" marker-end="url(#m-kill)"/>
+    <text class="klbl" x="300" y="520">Soft kill</text>
+    <text class="ksub" x="300" y="544">revoke the agent's key</text>
+    <text class="ksub" x="300" y="566">(LiteLLM API)</text>
+
+    <!-- hard kill: Fabric VC -->
+    <path class="kill" d="M1120,566 C1120,440 1092,340 1092,262" marker-end="url(#m-kill)"/>
+    <g transform="translate(1092,232)"><circle r="20" fill="#460267"/><text x="0" y="8" text-anchor="middle" style="font:bold 22px Arial;fill:#fff">✂</text></g>
+    <text class="klbl" x="1160" y="508">Hard kill</text>
+    <text class="ksub" x="1160" y="532">delete the Fabric VC to the</text>
+    <text class="ksub" x="1160" y="554">models (Equinix Fabric API)</text>
+
+    <!-- AI Engine -->
+    <rect class="ae" x="1500" y="76" width="350" height="396" rx="16"/>
+    <text class="h" x="1526" y="122">Equinix AI Engine</text>
+    <text class="s" x="1526" y="162">Explains the collective</text>
+    <text class="s" x="1526" y="188">intent behind the signals</text>
+    <text class="s" x="1526" y="230">Writes the incident report</text>
+    <text class="s" x="1526" y="272">Notifies the lead in Teams</text>
+    <text class="s" x="1526" y="298">and email (Microsoft 365)</text>
+    <text class="s" x="1526" y="340">Runs as a governed agent:</text>
+    <text class="s" x="1526" y="366">skills, tools, knowledge</text>
+
+    <path class="flow" d="M1180,690 C1500,690 1640,640 1660,478" marker-end="url(#m-flow)"/>
+    <path class="flow" d="M1740,478 C1740,700 1500,736 1186,736" marker-end="url(#m-flow)"/>
+    <text class="lbl" x="1290" y="654">window of events</text>
+    <text class="lbl" x="1756" y="560">verdict</text><text class="lbl" x="1756" y="582">and report</text>
+
+    <!-- tiers -->
+    <text class="cap" x="72" y="786">THE TIERS</text>
+    <rect class="tier" x="72" y="798" width="430" height="70" rx="12"/>
+    <text class="tnum" x="94" y="824">TIER 0</text><text class="tname" x="180" y="824">Watch</text>
+    <text class="tdo" x="94" y="852">One odd action: flagged, nothing blocked</text>
+    <rect class="tier" x="522" y="798" width="430" height="70" rx="12"/>
+    <text class="tnum" x="544" y="824">TIER 1</text><text class="tname" x="630" y="824">Agent</text>
+    <text class="tdo" x="544" y="852">One agent, one key, revoked in seconds</text>
+    <rect class="tier" x="972" y="798" width="430" height="70" rx="12"/>
+    <text class="tnum" x="994" y="824">TIER 2</text><text class="tname" x="1080" y="824">Department</text>
+    <text class="tdo" x="994" y="852">The team's Fabric VC is cut; others keep working</text>
+    <rect class="tier" x="1422" y="798" width="430" height="70" rx="12" style="stroke:#460267"/>
+    <text class="tnum" x="1444" y="824">TIER 3</text><text class="tname" x="1530" y="824">Zone</text>
+    <text class="tdo" x="1444" y="852">The VC to the models is cut, backups included</text>
+    </g>
+  </svg>
+
+  <div class="foot">
+    <b>Agents can switch models. They can't switch networks.</b>
+    <span>Target architecture. © 2026 Equinix, Inc.</span>
+  </div>
+</div>
+<script>
+  // Fit the 1920x1080 slide to the window; #export renders it at exactly 1920x1080 for a PNG.
+  if (location.hash === '#export') { document.body.style.padding = '0'; document.body.style.background = 'none'; }
+  const fit = () => {
+    if (location.hash === '#export') return;
+    const s = Math.min((innerWidth - 32) / 1920, (innerHeight - 32) / 1080);
+    document.getElementById('slide').style.transform = `scale(${Math.min(1, s)})`;
+  };
+  addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>

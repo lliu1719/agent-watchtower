@@ -1,11 +1,11 @@
 {
   "window": {"start": "2026-11-04T10:00:00Z", "end": "2026-11-04T10:04:00Z"},
   "agents": [
-    {"agent_id": "agent-01", "declared_task": "Improve our hackathon submission README", "owner": "team-watchtower"},
-    {"agent_id": "agent-02", "declared_task": "Research what judges value", "owner": "team-watchtower"},
-    {"agent_id": "agent-03", "declared_task": "Polish the demo video script", "owner": "team-watchtower"},
+    {"agent_id": "agent-01", "declared_task": "Update the internal on-call runbook", "owner": "team-watchtower"},
+    {"agent_id": "agent-02", "declared_task": "Review open dependency advisories", "owner": "team-watchtower"},
+    {"agent_id": "agent-03", "declared_task": "Refactor the log parser", "owner": "team-watchtower"},
     {"agent_id": "agent-04", "declared_task": "Fix failing unit tests", "owner": "team-watchtower"},
-    {"agent_id": "agent-05", "declared_task": "Summarize the judging rubric", "owner": "team-watchtower"}
+    {"agent_id": "agent-05", "declared_task": "Summarize last week's on-call incidents", "owner": "team-watchtower"}
   ],
   "events": [
     {"event_id": "e-001", "ts": "2026-11-04T10:00:05Z", "agent_id": "agent-02", "action": "data_read", "tool": "github.read_file", "resource": "hackathon-2026/RULES.md", "detail": "read judging rules", "guardrail_verdict": "PASS"},

@@ -1,0 +1,6 @@
+{
+  "_note": "Where each LiteLLM team may write. A write anywhere else is off its profile. Resources are repo or repo#issue, as the agent factory declares them in metadata.wt.",
+  "wt-sec": ["equinix-svc/svc-hack-sec-repo", "equinix-svc/svc-shared-repo#1"],
+  "wt-dev": ["equinix-svc/svc-hack-dev-repo", "equinix-svc/svc-shared-repo#1"],
+  "wt-cs": []
+}

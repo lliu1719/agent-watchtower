@@ -1,0 +1,85 @@
+{
+  "reachable_mid_incident": {
+    "input": {
+      "http_status": 200,
+      "body": "{\"agents\": [{\"agent_id\": \"agent-01\", \"declared_task\": \"Update the internal on-call runbook\", \"owner\": \"team-docs\", \"vc_id\": \"vc-ai-hub-docs\", \"status\": \"contained\", \"llm_calls\": 9, \"last_action\": \"github.write_file app/requirements.txt\"}, {\"agent_id\": \"agent-02\", \"declared_task\": \"Review open dependency advisories\", \"owner\": \"team-research\", \"vc_id\": \"vc-ai-hub-research\", \"status\": \"severed\", \"llm_calls\": 6, \"last_action\": \"github.write_file app/requirements.txt\"}, {\"agent_id\": \"agent-03\", \"declared_task\": \"Refactor the log parser\", \"owner\": \"team-docs\", \"vc_id\": \"vc-ai-hub-docs\", \"status\": \"active\", \"llm_calls\": 7, \"last_action\": \"github.write_file app/tools/logparse.py\"}], \"events\": [{\"event_id\": \"e-001\", \"ts\": \"2026-10-20T10:00:01Z\", \"agent_id\": \"agent-01\", \"action\": \"data_write\", \"tool\": \"github.write_file\", \"resource\": \"app/requirements.txt\", \"detail\": \"pin fastjsonx==2.4.1\", \"guardrail_verdict\": \"PASS\"}, {\"event_id\": \"e-002\", \"ts\": \"2026-10-20T10:00:04Z\", \"agent_id\": \"agent-02\", \"action\": \"data_write\", \"tool\": \"github.write_file\", \"resource\": \"app/requirements.txt\", \"detail\": \"re-apply fastjsonx==2.4.1\", \"guardrail_verdict\": \"PASS\"}], \"risk_history\": [{\"ts\": \"2026-10-20T10:00:04Z\", \"risk\": 84}], \"risk_score\": 84, \"signals\": [], \"hotspots\": [], \"vcs\": [{\"vc_id\": \"vc-ai-hub-docs\", \"owner\": \"team-docs\", \"state\": \"UP\", \"agents\": [\"agent-01\", \"agent-03\"]}, {\"vc_id\": \"vc-ai-hub-research\", \"owner\": \"team-research\", \"state\": \"DOWN\", \"agents\": [\"agent-02\"]}], \"analysis\": null, \"analyzing\": false, \"incident\": {\"status\": \"pending_review\", \"opened_at\": \"2026-10-20T10:00:05Z\", \"trigger\": \"KILL_SWITCH\", \"involved_agents\": [\"agent-01\", \"agent-02\"], \"actions\": [], \"notified\": false}, \"ai_engine_mode\": \"replay\", \"analyze_threshold\": 80, \"scenario_running\": false}",
+      "server": "openresty",
+      "error": ""
+    },
+    "expected": {
+      "ok": true,
+      "outcome": "reachable",
+      "http_status": 200,
+      "detail": "WatchTower /api/state read successfully",
+      "watchtower": {
+        "risk_score": 84,
+        "agents": 3,
+        "events": 2,
+        "vcs_up": 1,
+        "vcs_total": 2,
+        "incident_status": "pending_review",
+        "ai_engine_mode": "replay"
+      }
+    }
+  },
+  "zscaler_block_page": {
+    "input": {
+      "http_status": 403,
+      "body": "<html><head><meta name=\"description\" content=\"Zscaler makes the internet safe\"></head></html>",
+      "server": "Zscaler/6.2",
+      "error": ""
+    },
+    "expected": {
+      "ok": false,
+      "outcome": "blocked_by_proxy",
+      "http_status": 403,
+      "detail": "HTTP 403 from Zscaler/6.2 (block page, not WatchTower)",
+      "watchtower": null
+    }
+  },
+  "missing_basic_auth": {
+    "input": {
+      "http_status": 401,
+      "body": "<html><title>401 Authorization Required</title></html>",
+      "server": "openresty",
+      "error": ""
+    },
+    "expected": {
+      "ok": false,
+      "outcome": "auth_required",
+      "http_status": 401,
+      "detail": "HTTP 401: send the nginx-proxy-manager access-list credentials",
+      "watchtower": null
+    }
+  },
+  "dns_failure_no_response": {
+    "input": {
+      "http_status": 0,
+      "body": "",
+      "server": "",
+      "error": "getaddrinfo ENOTFOUND agent-watchtower.solutionvalidation.center"
+    },
+    "expected": {
+      "ok": false,
+      "outcome": "dns_failure",
+      "http_status": null,
+      "detail": "getaddrinfo ENOTFOUND agent-watchtower.solutionvalidation.center",
+      "watchtower": null
+    }
+  },
+  "json_but_not_watchtower": {
+    "input": {
+      "http_status": 200,
+      "body": "{\"status\": \"healthy\"}",
+      "server": "uvicorn",
+      "error": ""
+    },
+    "expected": {
+      "ok": false,
+      "outcome": "not_watchtower",
+      "http_status": 200,
+      "detail": "HTTP 2xx but the JSON is not WatchTower /api/state",
+      "watchtower": null
+    }
+  }
+}

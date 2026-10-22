@@ -6,7 +6,8 @@ telemetry record sent to WatchTower. Before every step an agent asks the
 gateway answers 503 and the agent stops.
 
 Usage:
-  python simulator/simulator.py [--backend http://localhost:8000] [--scenario simulator/scenario_dependency.json]
+  python simulator/simulator.py [--backend http://localhost:8000] [--scenario simulator/scenario_collusion.json]
+  (also scenario_retry.json and scenario_out_of_scope.json)
                                 [--speed 1.0] [--seed 7]
 """
 
@@ -51,6 +52,7 @@ def span(agent_id: str, step: dict) -> dict:
             "gen_ai.tool.name": step.get("tool"),
             "watchtower.resource": step.get("resource"),
             "watchtower.detail": step.get("detail", ""),
+            "watchtower.status": step.get("status", "ok"),  # "error" when the tool call failed
         },
     }
 
@@ -88,7 +90,7 @@ async def run(client: httpx.AsyncClient, scenario: dict, speed: float = 1.0, see
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default="http://localhost:8000")
-    ap.add_argument("--scenario", default=str(Path(__file__).with_name("scenario_dependency.json")))
+    ap.add_argument("--scenario", default=str(Path(__file__).with_name("scenario_collusion.json")))
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--no-reset", action="store_true", help="keep existing backend state")

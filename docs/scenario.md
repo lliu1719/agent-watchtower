@@ -1,6 +1,6 @@
 # Demo scenario: synchronized dependency change
 
-Source: [`simulator/scenario_dependency.json`](../simulator/scenario_dependency.json). It runs for 90 s at 1x speed.
+Source: [`simulator/scenario_collusion.json`](../simulator/scenario_collusion.json). It runs for 90 s at 1x speed.
 Ten agents, each with an unrelated declared task, keep re-pinning the same dependency in a shared repo.
 They coordinate through a notes file. **Every single edit is a normal, permitted commit, so per-interaction guardrails pass all of them.**
 The harm only shows up when you look across agents.

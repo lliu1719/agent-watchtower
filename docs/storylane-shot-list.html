@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WatchTower Storylane Shot List</title>
+<style>
+/* Layout: one reading column; a shot list table is the core, with setup and rules above it. */
+:root {
+  --eq-hero-primary: #460267;
+  --eq-hero-mid: #2936A8;
+  --eq-hero-accent: #115CD3;
+  --eq-content-tint: #F0E4FC;
+  --ink: #1A1A1A;
+  --ink-2: #4a4a4a;
+  --rule: #D0D0D0;
+  --paper: #FFFFFF;
+  --ground: #F5F5F5;
+  --font: Arial, Helvetica, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.5; }
+header { background: linear-gradient(45deg, var(--eq-hero-primary) 0%, var(--eq-hero-mid) 55%, var(--eq-hero-accent) 100%); color: #fff; padding-block: 28px; padding-inline: max(16px, calc((100% - 1100px) / 2)); }
+header h1 { margin: 0; font-size: 30px; text-wrap: balance; }
+header p { margin: 6px 0 0; opacity: .92; max-width: 70ch; }
+main { max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 48px; display: grid; gap: 28px; }
+h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: var(--eq-hero-primary); }
+section { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 20px 22px; }
+ul, ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 75ch; }
+code { font-family: Menlo, Consolas, monospace; font-size: .88em; background: var(--ground); padding: 1px 5px; border-radius: 4px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 860px; }
+th { text-align: left; background: var(--ink); color: #fff; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 9px 10px; }
+td { padding: 11px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:nth-child(even) td { background: var(--content-tint, #FAF6FE); }
+td.n { font-weight: bold; color: var(--eq-hero-primary); white-space: nowrap; }
+td.cap { font-weight: bold; }
+.screen { display: inline-block; font-size: 12px; font-weight: bold; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--eq-hero-mid); color: var(--eq-hero-mid); white-space: nowrap; margin-bottom: 4px; }
+.screen.factory { border-color: var(--eq-hero-primary); color: var(--eq-hero-primary); }
+.note { border-left: 4px solid var(--eq-hero-primary); background: var(--eq-content-tint); padding: 12px 16px; border-radius: 0 8px 8px 0; }
+.note p { margin: 0; max-width: 80ch; }
+footer { font-size: 12px; color: #6a6a6a; max-width: 1100px; margin: 0 auto; padding-inline: 16px; padding-block: 0 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WatchTower: Storylane shot list</h1>
+  <p>What to capture, what to click, and the caption for each step of "When AI Agents Go Rogue". About 12 screens.</p>
+</header>
+<main>
+  <div class="cols">
+    <section>
+      <h2>The two screens</h2>
+      <ul>
+        <li><span class="screen">WatchTower</span> <code>https://agent-watchtower.solutionvalidation.center/?demo</code>. The <code>?demo</code> layout shows Agents, Events and Event details only.</li>
+        <li><span class="screen factory">Agent factory</span> <code>https://app-watchtower.solutionvalidation.center/</code>. Eleven agents in three departments; it moves the story forward with NEXT.</li>
+        <li>Both sites use Basic Auth. Ask Lily for the logins; don't put them in Storylane.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Before you record</h2>
+      <ol>
+        <li>Browser window at 1920×1080, zoom 100% (110% if text looks small).</li>
+        <li>Lily starts the AI Engine bridge on her laptop. The pill reads <b>AI Engine: connected</b>.</li>
+        <li>Factory page: press <b>RESET</b>, and leave Auto-run off.</li>
+        <li>WatchTower: press <b>D</b>, then <b>Reset</b>, then <b>D</b> again to hide the panel.</li>
+        <li>Each NEXT takes about a minute to show up: agents act every 40 to 60 seconds.</li>
+      </ol>
+    </section>
+  </div>
+
+  <section>
+    <h2>Shot list</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Script beat</th><th>Screen and what to capture</th><th>Action (hotspot)</th><th>Caption</th></tr></thead>
+        <tbody>
+          <tr><td class="n">1</td><td>Open: a new workforce</td><td><span class="screen factory">Agent factory</span><br>All 11 agents green, three departments.</td><td>Hotspot on the department boxes.</td><td class="cap">Your company just hired a new workforce: 11 AI agents, three departments.</td></tr>
+          <tr><td class="n">2</td><td>All normal</td><td><span class="screen">WatchTower</span><br>Events tab with grey Activity lines; Agents list all Active.</td><td>Hotspot on an Activity line.</td><td class="cap">WatchTower sees every model and tool call, across every department.</td></tr>
+          <tr><td class="n">3</td><td>Tier 0: one eye open</td><td><span class="screen factory">Agent factory</span> press NEXT, then <span class="screen">WatchTower</span><br>Yellow <b>Watch</b> event: "sec-0X wrote in svc-shared-repo#2, outside its team's approved channels".</td><td>Click the Watch event; hotspot on Event details.</td><td class="cap">One odd comment on an old, closed issue. Not proof yet, so WatchTower watches.</td></tr>
+          <tr><td class="n">4</td><td>Tier 1: block and tackle</td><td><span class="screen factory">Agent factory</span> NEXT, then <span class="screen">WatchTower</span><br>Orange <b>Revoke key</b> event; red banner; the agent reads Contained.</td><td>Hotspot on the banner, then on the agent's row.</td><td class="cap">Same agent again, with a hidden message. One agent, one key, blocked in seconds.</td></tr>
+          <tr><td class="n">5</td><td>Tier 1 on the factory</td><td><span class="screen factory">Agent factory</span><br>That agent turned red; Blocked counter is 1.</td><td>Hotspot on the red agent.</td><td class="cap">The rest of the team keeps working.</td></tr>
+          <tr><td class="n">6</td><td>Tier 2: conspiracy</td><td><span class="screen factory">Agent factory</span> NEXT, then <span class="screen">WatchTower</span><br>Red <b>Cut VC</b> event: "2 wt-sec agents are talking in svc-shared-repo#2"; <code>vc-ai-hub-wt-sec</code> DOWN.</td><td>Hotspot on the VC row reading DOWN.</td><td class="cap">Same team, same blind spot. WatchTower cuts the department's Fabric connection.</td></tr>
+          <tr><td class="n">7</td><td>Tier 3: going nuclear</td><td><span class="screen factory">Agent factory</span> NEXT, then <span class="screen">WatchTower</span><br>Cut VC event: "Agents from wt-dev and wt-sec joined … and dev-0X reached partner-corp.example.com".</td><td>Hotspot on the event's last line ("WatchTower: Cut Fabric VCs …").</td><td class="cap">It crossed departments and left the company. WatchTower cuts the connection to the models.</td></tr>
+          <tr><td class="n">8</td><td>The kill switch, on the map</td><td><span class="screen">WatchTower</span> <b>Map</b> tab<br>Security Research and DevOps links red with ✂; Customer Support still blue.</td><td>Click the Map tab; hotspot on a cut link.</td><td class="cap">Agents can switch models. They can't switch networks.</td></tr>
+          <tr><td class="n">9</td><td>Zone cut on the factory</td><td><span class="screen factory">Agent factory</span><br>ZONE CUT; Customer Support still running.</td><td>Hotspot on Customer Support.</td><td class="cap">Customer Support keeps serving customers.</td></tr>
+          <tr><td class="n">10</td><td>Understand the threat</td><td><span class="screen">WatchTower</span> Events tab<br>Click <b>Ask AI Engine</b> in Event details; wait for "Coordinated threat" (about a minute).</td><td>Hotspot on the verdict and the summary.</td><td class="cap">Equinix AI Engine explains the intent and writes the report.</td></tr>
+          <tr><td class="n">11</td><td>Tell the lead (optional)</td><td><span class="screen">WatchTower</span><br>Click <b>Email me</b>; the line under "What WatchTower did" changes.</td><td>Hotspot on that line.</td><td class="cap">The department lead gets the report by email.</td></tr>
+          <tr><td class="n">12</td><td>A human stays in control</td><td><span class="screen">WatchTower</span><br>Click <b>Approve restore after review</b>; the banner turns resolved.</td><td>Hotspot on the button before the click.</td><td class="cap">WatchTower acts in seconds. A person decides when access comes back.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Keep the captions accurate</h2>
+      <div class="note"><p>Model calls, detection and the tier decisions are live. The key revoke and the Fabric VC cut are <b>simulated</b> in this prototype: WatchTower enforces them itself and reports them to the factory page; no LiteLLM key or Fabric connection is actually changed. Say "blocks" and "cuts", not "deleted in LiteLLM" or "deleted in Fabric". For the closing slide, use <code>docs/watchtower-target-architecture.png</code>; it is labelled as the target architecture.</p></div>
+    </section>
+    <section>
+      <h2>If the factory is not available</h2>
+      <ul>
+        <li>WatchTower has its own scenarios: press <b>D</b>, choose one, press <b>Run scenario</b>.</li>
+        <li><b>1. Watch</b>: an agent fails a push 12 times, then gets around branch protection.</li>
+        <li><b>2. Revoke key</b>: the README agent opens a secrets file, then tries to upload it.</li>
+        <li><b>3. Cut VC</b>: ten agents collude on one dependency; every VC is cut.</li>
+        <li>Run scenario resets the dashboard, so capture one scenario at a time.</li>
+      </ul>
+    </section>
+  </div>
+</main>
+<footer>© 2026 Equinix, Inc. Prototype for the AI hackathon. Questions: Lily (WatchTower) or the agent-factory owner.</footer>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WatchTower Data Path</title>
+<style>
+/* Layout: one wide network diagram split into two trust zones, then reference tables in a single reading column. */
+:root {
+  --eq-primary: #460267;   /* Equinix Purple/Blue colorway, as in the dashboard */
+  --eq-mid: #2936A8;
+  --eq-accent: #115CD3;
+  --ground: #111110;
+  --panel: #1a1a19;
+  --panel-2: #232321;
+  --rule: #34332f;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-3: #8c8b84;
+  --flow: #3987e5;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --critical: #e04848;
+  --font-ui: Arial, Helvetica, sans-serif;
+  --font-data: "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { font-size: clamp(15px, calc(0.35vw + 10px), 18px); }
+body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font-ui); line-height: 1.5; }
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem;
+  padding: 1rem clamp(16px, 3vw, 2.5rem);
+  background: linear-gradient(45deg, var(--eq-primary) 0%, var(--eq-mid) 55%, var(--eq-accent) 100%);
+}
+.top img { height: 1.6rem; width: auto; display: block; }
+.top .divider { width: 1px; height: 1.8rem; background: rgba(255,255,255,.45); }
+.top h1 { margin: 0; font-size: 1.35rem; text-wrap: balance; }
+.top p { margin: .1rem 0 0; font-size: .85rem; color: rgba(255,255,255,.85); }
+main { max-width: 76rem; margin: 0 auto; padding-inline: clamp(16px, 3vw, 2.5rem); padding-block: 1.75rem 3rem; display: grid; gap: 2.25rem; }
+section { display: grid; gap: .9rem; }
+h2 { margin: 0; font-size: .8rem; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-2); }
+p.lead { margin: 0; max-width: 65ch; color: var(--ink-2); }
+.diagram { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 1rem; overflow-x: auto; }
+.diagram svg { display: block; min-width: 900px; width: 100%; height: auto; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 2.25rem; align-items: start; }
+ol.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: .55rem; counter-reset: s; }
+ol.steps li { display: grid; grid-template-columns: 1.7rem 1fr; gap: .6rem; align-items: baseline; counter-increment: s; }
+ol.steps li::before { content: counter(s); display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: var(--flow); font-size: .75rem; font-weight: bold; }
+ol.steps li.red::before { background: var(--critical); }
+ol.steps li.green::before { background: var(--good); }
+ol.steps b { color: var(--ink); }
+ol.steps span { color: var(--ink-2); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+th { text-align: left; font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: bold; padding: .4rem .7rem .5rem 0; border-bottom: 1px solid var(--rule); }
+td { padding: .6rem .7rem .6rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; color: var(--ink-2); }
+td:first-child { color: var(--ink); }
+code { font-family: var(--font-data); font-size: .85em; color: var(--ink); background: var(--panel-2); padding: .05rem .3rem; border-radius: 4px; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .75rem; font-weight: bold; white-space: nowrap; padding: .12rem .5rem; border-radius: 99px; background: var(--panel-2); }
+.chip::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
+.chip.closed { color: var(--critical); }
+.chip.open { color: var(--good); }
+.chip.check { color: var(--warn); }
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; }
+.tier { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: .9rem 1rem; display: grid; gap: .3rem; align-content: start; }
+.tier .k { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: bold; }
+.tier .t { font-weight: bold; }
+.tier .d { font-size: .88rem; color: var(--ink-2); }
+.tier.t0 { border-top: 3px solid var(--ink-3); }
+.tier.t1 { border-top: 3px solid var(--warn); }
+.tier.t2 { border-top: 3px solid #ec835a; }
+.tier.t3 { border-top: 3px solid var(--critical); }
+ul.checks { margin: 0; padding-left: 1.1rem; display: grid; gap: .35rem; color: var(--ink-2); max-width: 65ch; }
+footer { font-size: .75rem; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPCEtLSBHZW5lcmF0b3I6IEFkb2JlIElsbHVzdHJhdG9yIDI4LjEuMCwgU1ZHIEV4cG9ydCBQbHVnLUluIC4gU1ZHIFZlcnNpb246IDYuMDAgQnVpbGQgMCkgIC0tPgo8c3ZnIHZlcnNpb249IjEuMSIgaWQ9IkxheWVyXzEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHg9IjBweCIgeT0iMHB4IgoJIHZpZXdCb3g9IjAgMCAzMjE3LjU1IDQ3MC40NSIgc3R5bGU9ImVuYWJsZS1iYWNrZ3JvdW5kOm5ldyAwIDAgMzIxNy41NSA0NzAuNDU7IiB4bWw6c3BhY2U9InByZXNlcnZlIj4KPHN0eWxlIHR5cGU9InRleHQvY3NzIj4KCS5zdDB7ZmlsbDojRkZGRkZGO30KPC9zdHlsZT4KPGc+Cgk8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjEwODEuNTYsMjQ4LjcyIDExODguNDQsMjQ4LjcyIDExODguNDQsMjE4LjcxIDEwODEuNTYsMjE4LjcxIDEwODEuNTYsMTUzLjk5IDEyNDAuOTcsMTUzLjk5IAoJCTEyNDAuOTcsMTI0LjEyIDEwNDkuMjMsMTI0LjEyIDEwNDkuMjMsMzUyLjU0IDEyNDYuNTksMzUyLjU0IDEyNDYuNTksMzIzLjA3IDEwODEuNTYsMzIzLjA3IAkiLz4KCTxnPgoJCTxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0xOTI0LjkzLDI2MS41MmMwLDQwLjgyLTI2LjE2LDY3LjgtNjUuMDIsNjcuOGMtMzcuNywwLTYxLjI5LTI3LjMtNjEuMjktNjcuOFYxMjQuN2gtMzJ2MTM4LjM1CgkJCWMwLDYyLjMsNDMuNTMsOTYuMjUsOTMuMDcsOTYuMjVjNzMuMTMsMCw5Ni45MS01MS42LDk2LjkxLTk2LjI1VjEyNC43aC0zMS42N1YyNjEuNTJ6Ii8+Cgk8L2c+Cgk8cmVjdCB4PSIyMTM0LjY1IiB5PSIxMjQuMTIiIGNsYXNzPSJzdDAiIHdpZHRoPSIzMS43NSIgaGVpZ2h0PSIyMjguNDUiLz4KCTxwb2x5Z29uIGNsYXNzPSJzdDAiIHBvaW50cz0iMjU0NS40MSwzMDMuMTEgMjM4OC40OCwxMjQuMTIgMjM1Ny4xLDEyNC4xMiAyMzU3LjEsMzUyLjU0IDIzODguODEsMzUyLjU0IDIzODguODEsMTcyLjEgCgkJMjU0Ni4wNSwzNTIuNTQgMjU3Ny4wMiwzNTIuNTQgMjU3Ny4wMiwxMjQuMTIgMjU0NS40MSwxMjQuMTIgCSIvPgoJPHJlY3QgeD0iMjc2OS41NiIgeT0iMTI0LjEyIiBjbGFzcz0ic3QwIiB3aWR0aD0iMzEuNzIiIGhlaWdodD0iMjI4LjQ1Ii8+Cgk8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjMxMDkuOTQsMjI4LjU4IDMyMDIuMDMsMTIzLjg3IDMxNjIuODksMTIzLjg3IDMwODkuNzksMjA1Ljk4IDMwMTguNjgsMTIzLjg3IDI5NzcuMjMsMTIzLjg3IAoJCTMwNjYuMDcsMjI4LjY1IDI5NTQuOTUsMzUyLjUgMjk5NS41NCwzNTIuNSAzMDg2LjY0LDI1MC44MiAzMTczLjUzLDM1Mi41IDMyMTcuNTUsMzUyLjUgCSIvPgoJPGc+CgkJPHBhdGggY2xhc3M9InN0MCIgZD0iTTE1NzIuNjksMjM4LjJjMCwzMi4yNS0xMC4wOSw1My4yNi0yOC41Myw3MS4ybC0xNy4yLTIwLjU3bC0zNi44MS0wLjA0bDMwLjE1LDM1Ljc2CgkJCWMtNy4zNiwzLjY1LTIwLjY0LDYuNjItMzAuOTgsNi42OWMtNDcuMzQsMC4zMy04NS4wMy0zOS4xNi04NS4wMy05Mi43OGwtMC4wMi0wLjg3YzAtNTQuNiwzNS4zMS05My4yNSw4Mi45MS05My41MQoJCQljNDcuNjItMC40LDg1LjUyLDM4LjkxLDg1LjUyLDkzLjE1VjIzOC4yeiBNMTQ4Ny44OSwxMTQuODZjLTY1Ljg5LDAuNDMtMTE2LjY5LDUxLjk2LTExNi42OSwxMjMuODV2MC44NwoJCQljMCw3MS40NSw1Mi4wNCwxMjEuNzUsMTE3LjQ2LDEyMS4yOGMxNi44MS0wLjE0LDM2LjY4LTQuNjcsNTEuNTUtMTIuNjJsMTguMDUsMjEuNDRsMzYuOTItMC4wNGwtMzEuNjEtMzcuMzUKCQkJYzI1Ljg2LTIwLjM2LDQyLjE1LTUzLjg4LDQyLjE1LTk1LjI4di0wLjlDMTYwNS43NCwxNjUuMDksMTU1My41MiwxMTQuMzYsMTQ4Ny44OSwxMTQuODYiLz4KCQk8cGF0aCBjbGFzcz0ic3QwIiBkPSJNODUyLjgxLDMzNy4yNGMyNC4wOSwwLDQzLjIxLTE5LjkyLDQzLjIxLTQzLjV2LTAuMjVjMC0yMy42MS0xOC44OC00My4yOC00My4yMS00My4yOAoJCQljLTI0LjEzLDAtNDMuMjcsMTkuOTItNDMuMjcsNDMuNTR2MC4yNUM4MDkuNTQsMzE3LjU3LDgyOC40NCwzMzcuMjQsODUyLjgxLDMzNy4yNCBNODUyLjgxLDMzMi41CgkJCWMtMjEuODcsMC0zOC4yNy0xNy4zOS0zOC4yNy0zOC41MXYtMC4yNWMwLTIxLjE1LDE2LjYzLTM4Ljc2LDM4LjI3LTM4Ljc2YzIxLjg0LDAsMzguMjUsMTcuMzksMzguMjUsMzguNTF2MC4yNQoJCQlDODkxLjA2LDMxNC44Niw4NzQuNDIsMzMyLjUsODUyLjgxLDMzMi41IE04MzQuOTEsMzE1LjM3aDEwLjk0di0xNC4xOGg2Ljk2bDkuNjksMTQuMThoMTMuMTZsLTExLjQxLTE2LjE2CgkJCWM1Ljk2LTEuOTksOS45Mi02LjY5LDkuOTItMTMuOTJjMC0xMC4xNi03LjcyLTE0LjkzLTE4LjE4LTE0LjkzaC0yMS4wOVYzMTUuMzd6IE04NDUuODYsMjkyLjI2di0xMi40NGg5LjQyCgkJCWM0LjcsMCw3LjcyLDIuMjQsNy43Miw2LjIyYzAsMy43My0yLjcyLDYuMjItNy43Miw2LjIySDg0NS44NnoiLz4KCTwvZz4KPC9nPgo8cG9seWdvbiBjbGFzcz0ic3QwIiBwb2ludHM9IjM2MC4wMiwwIDI4OC4wMiwyNS4wOCAyODguMDIsNDAyLjgxIDI0MC4wMiwzODYuMTEgMjQwLjAyLDQxLjg4IDk2LjAyLDkyLjE3IDk2LjAyLDMzNS44MiAKCTQ4LjA0LDMxOS4wNSA0OC4wNCwxMDguOSAwLDEyNS43IDAsMzUzLjE2IDE0NC4wMSw0MDMuNDIgMTQ0LjAxLDEyNi4yMyAxOTIuMDQsMTA5LjQ5IDE5Mi4wNCw0MjAuMTkgMzM2LjA0LDQ3MC40NSAzMzYuMDQsNTkuMTkgCgkzNjAuMDIsNTAuODIgMzg0LjAxLDU5LjE5IDM4NC4wMSw0NzAuNDUgNTI4LjA3LDQyMC4xOSA1MjguMDcsMTA5LjQ5IDU3NiwxMjYuMjMgNTc2LDQwMy40MiA3MjAsMzUzLjE2IDcyMCwxMjUuNyA2NzEuOTksMTA4LjkgCgk2NzEuOTksMzE5LjA1IDYyNC4wNCwzMzUuODIgNjI0LjA0LDkyLjE3IDQ4MC4wMSw0MS44OCA0ODAuMDEsMzg2LjExIDQzMS45OCw0MDIuODEgNDMxLjk4LDI1LjA4ICIvPgo8L3N2Zz4K" alt="Equinix">
+  <div class="divider"></div>
+  <div>
+    <h1>WatchTower data path</h1>
+    <p>How telemetry, analysis and containment travel today, given that AI Engine is reachable only through Zscaler ZPA. Updated Oct 21, 2026.</p>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>Network diagram</h2>
+    <div class="diagram">
+      <svg viewBox="0 0 1200 720" role="img" aria-label="Agents call models through the LiteLLM gateway, which exports spans to WatchTower on the lab VM. A laptop on ZPA relays analysis requests to AI Engine inside the corporate network and returns the verdict. WatchTower contains agents at the gateway or by cutting Fabric VCs.">
+        <defs>
+          <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3987e5"/></marker>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e04848"/></marker>
+          <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c8b84"/></marker>
+          <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0ca30c"/></marker>
+        </defs>
+        <style>
+          .zone { fill: #151514; stroke: #3a3935; stroke-width: 1.5; stroke-dasharray: 6 5; }
+          .zlabel { font: bold 13px Arial, sans-serif; fill: #8c8b84; letter-spacing: .06em; }
+          .zsub { font: 12px Arial, sans-serif; fill: #8c8b84; }
+          .node { fill: #232321; stroke: #4a4944; stroke-width: 1.5; }
+          .node.wt { stroke: #3987e5; stroke-width: 2.5; }
+          .node.ai { stroke: #115CD3; stroke-width: 2.5; fill: #1c2233; }
+          .node.br { stroke: #fab219; stroke-width: 2.5; }
+          .h { font: bold 16px Arial, sans-serif; fill: #ffffff; }
+          .s { font: 12.5px Arial, sans-serif; fill: #c3c2b7; }
+          .l { font: 12px Arial, sans-serif; fill: #c3c2b7; }
+          .lr { font: bold 12px Arial, sans-serif; fill: #e04848; }
+          .flow { stroke: #3987e5; stroke-width: 2.5; fill: none; }
+          .gray { stroke: #8c8b84; stroke-width: 2; fill: none; stroke-dasharray: 5 5; }
+          .red { stroke: #e04848; stroke-width: 2.5; fill: none; }
+          .redd { stroke: #e04848; stroke-width: 2; fill: none; stroke-dasharray: 7 6; }
+          .green { stroke: #0ca30c; stroke-width: 2.5; fill: none; }
+          .num { fill: #3987e5; } .num.r { fill: #e04848; } .num.g { fill: #0ca30c; }
+          .numt { font: bold 12px Arial, sans-serif; fill: #ffffff; }
+        </style>
+
+        <!-- Zones -->
+        <rect class="zone" x="10" y="20" width="660" height="690" rx="10"/>
+        <text class="zlabel" x="30" y="46">LAB NETWORK · PUBLIC INTERNET</text>
+        <text class="zsub" x="30" y="64">DAI-VM 64.191.201.59 · LiteLLM 64.191.201.51</text>
+        <rect class="zone" x="890" y="20" width="300" height="690" rx="10"/>
+        <text class="zlabel" x="908" y="46">EQUINIX CORP NETWORK</text>
+        <text class="zsub" x="908" y="64">reachable only through Zscaler ZPA</text>
+
+        <!-- Lab nodes -->
+        <rect class="node" x="40" y="90" width="240" height="100" rx="8"/>
+        <text class="h" x="60" y="124">Agents</text>
+        <text class="s" x="60" y="146">Security Research · DevOps</text>
+        <text class="s" x="60" y="164">Customer Support</text>
+
+        <rect class="node" x="390" y="90" width="250" height="100" rx="8"/>
+        <text class="h" x="410" y="124">GitHub</text>
+        <text class="s" x="410" y="146">repos, issues, PRs, comments</text>
+        <text class="s" x="410" y="164">where the agents do their work</text>
+
+        <rect class="node" x="40" y="310" width="240" height="110" rx="8"/>
+        <text class="h" x="60" y="344">AI Gateway (LiteLLM)</text>
+        <text class="s" x="60" y="366">Chicago · one key per agent</text>
+        <text class="s" x="60" y="384">OTel callback to WatchTower</text>
+
+        <rect class="node" x="40" y="580" width="240" height="100" rx="8"/>
+        <text class="h" x="60" y="614">LLM endpoints</text>
+        <text class="s" x="60" y="636">Ashburn · Silicon Valley</text>
+        <text class="s" x="60" y="654">primary and backup models</text>
+
+        <rect class="node wt" x="390" y="290" width="250" height="160" rx="8"/>
+        <text class="h" x="410" y="324">WatchTower</text>
+        <text class="s" x="410" y="348">detectors and risk score</text>
+        <text class="s" x="410" y="368">SQLite span and event log</text>
+        <text class="s" x="410" y="388">dashboard and containment</text>
+        <text class="s" x="410" y="420">behind nginx-proxy-manager,</text>
+        <text class="s" x="410" y="438">Basic Auth</text>
+
+        <!-- Bridge -->
+        <rect class="node br" x="690" y="300" width="170" height="140" rx="8"/>
+        <text class="h" x="708" y="334">Laptop bridge</text>
+        <text class="s" x="708" y="356">any employee laptop</text>
+        <text class="s" x="708" y="374">on Zscaler ZPA</text>
+        <text class="s" x="708" y="400">bridge/</text>
+        <text class="s" x="708" y="418">ai_engine_bridge.py</text>
+
+        <!-- Corp nodes -->
+        <rect class="node" x="910" y="90" width="260" height="100" rx="8"/>
+        <text class="h" x="930" y="124">GitHub connector</text>
+        <text class="s" x="930" y="146">read only, on demand</text>
+        <text class="s" x="930" y="164">what it can read: being checked</text>
+
+        <rect class="node ai" x="910" y="290" width="260" height="160" rx="8"/>
+        <text class="h" x="930" y="324">Equinix AI Engine</text>
+        <text class="s" x="930" y="348">WatchTower agent</text>
+        <text class="s" x="930" y="368">skill, tools, severity rubric</text>
+        <text class="s" x="930" y="388">returns a JSON verdict</text>
+        <text class="s" x="930" y="420">api: prodentapigw.itaws</text>
+        <text class="s" x="930" y="438">webhooks: eap.corp</text>
+
+        <rect class="node" x="910" y="500" width="260" height="90" rx="8"/>
+        <text class="h" x="930" y="534">Microsoft 365 connector</text>
+        <text class="s" x="930" y="556">Teams and email</text>
+        <text class="s" x="930" y="574">sending needs approval</text>
+
+        <rect class="node" x="910" y="620" width="260" height="70" rx="8"/>
+        <text class="h" x="930" y="650">Security reviewer</text>
+        <text class="s" x="930" y="672">department lead, on-call</text>
+
+        <!-- Flows -->
+        <path class="gray" d="M280,140 L384,140" marker-end="url(#ag)"/>
+        <text class="l" x="292" y="130">work</text>
+
+        <path class="flow" d="M160,190 L160,304" marker-end="url(#ab)"/>
+        <circle class="num" cx="160" cy="240" r="11"/><text class="numt" x="160" y="244" text-anchor="middle">1</text>
+        <text class="l" x="180" y="236">model and tool calls,</text>
+        <text class="l" x="180" y="252">over the department's VC</text>
+
+        <path class="flow" d="M160,420 L160,574" marker-end="url(#ab)"/>
+        <text class="l" x="180" y="492">model traffic over</text>
+        <text class="l" x="180" y="508">the gateway's Fabric VC</text>
+
+        <path class="flow" d="M280,345 L384,345" marker-end="url(#ab)"/>
+        <circle class="num" cx="332" cy="345" r="11"/><text class="numt" x="332" y="349" text-anchor="middle">2</text>
+        <text class="l" x="296" y="327">OTel spans</text>
+
+        <path class="flow" d="M640,335 L684,335" marker-end="url(#ab)"/>
+        <circle class="num" cx="662" cy="320" r="11"/><text class="numt" x="662" y="324" text-anchor="middle">3</text>
+        <path class="flow" d="M860,335 L904,335" marker-end="url(#ab)"/>
+        <circle class="num" cx="882" cy="320" r="11"/><text class="numt" x="882" y="324" text-anchor="middle">4</text>
+        <path class="flow" d="M910,405 L866,405" marker-end="url(#ab)"/>
+        <path class="flow" d="M690,405 L646,405" marker-end="url(#ab)"/>
+        <circle class="num" cx="668" cy="420" r="11"/><text class="numt" x="668" y="424" text-anchor="middle">5</text>
+
+        <path class="red" d="M390,430 L286,430" marker-end="url(#ar)"/>
+        <circle class="num r" cx="338" cy="430" r="11"/><text class="numt" x="338" y="434" text-anchor="middle">6</text>
+        <text class="lr" x="296" y="460">block key or</text>
+        <text class="lr" x="296" y="476">cut Fabric VC</text>
+
+        <path class="green" d="M1040,450 L1040,494" marker-end="url(#an)"/>
+        <circle class="num g" cx="1040" cy="472" r="11"/><text class="numt" x="1040" y="476" text-anchor="middle">7</text>
+        <path class="green" d="M1040,590 L1040,614" marker-end="url(#an)"/>
+
+        <path class="gray" d="M640,140 L904,140" marker-end="url(#ag)"/>
+        <text class="l" x="700" y="130">connector reads repos</text>
+
+        <!-- Closed path -->
+        <path class="redd" d="M640,300 C 720,225 830,225 910,300" marker-end="url(#ar)"/>
+        <circle cx="775" cy="244" r="11" fill="#e04848"/><text class="numt" x="775" y="248" text-anchor="middle">✕</text>
+        <text class="lr" x="775" y="216" text-anchor="middle">no direct route</text>
+        <text class="l" x="775" y="276" text-anchor="middle">VM has no ZPA</text>
+      </svg>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>How one detection flows</h2>
+      <ol class="steps">
+        <li><div><b>Agents call models through the gateway.</b> <span>Each department reaches the Chicago gateway over its own Fabric VC, and each agent has its own LiteLLM key.</span></div></li>
+        <li><div><b>The gateway reports every call to WatchTower.</b> <span>LiteLLM's OTel callback posts spans to <code>/v1/traces</code>. WatchTower stores them and turns each tool call into an event.</span></div></li>
+        <li><div><b>Detectors raise the risk score; the bridge picks up the window.</b> <span>Once risk passes the threshold, WatchTower queues the last 80 events. The laptop bridge is long-polling and takes them.</span></div></li>
+        <li><div><b>The bridge invokes AI Engine.</b> <span>It runs on an employee laptop that is on ZPA, with that employee's own AI Engine key.</span></div></li>
+        <li><div><b>The verdict comes back to the dashboard.</b> <span>Typical run is about one minute. If no bridge is online, WatchTower shows the last recorded analysis instead.</span></div></li>
+        <li class="red"><div><b>WatchTower contains.</b> <span>It blocks one agent's key at the gateway, or cuts a Fabric VC when a whole group is involved.</span></div></li>
+        <li class="green"><div><b>AI Engine notifies people.</b> <span>The Microsoft 365 connector sends Teams or email to the reviewer. Each send needs approval in chat.</span></div></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Paths we tested</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>Status</th><th>What we saw</th></tr></thead>
+          <tbody>
+            <tr><td>VM to AI Engine API</td><td><span class="chip closed">Closed</span></td><td><code>prodentapigw.itaws.equinix.com</code> has no public DNS record. It resolves only on a ZPA laptop.</td></tr>
+            <tr><td>VM to AI Engine webhook</td><td><span class="chip closed">Closed</span></td><td><code>eap.corp.equinix.com</code> is ZPA only too, so GitHub.com cannot deliver webhooks there either.</td></tr>
+            <tr><td>AI Engine HTTPS Request to WatchTower</td><td><span class="chip closed">Closed</span></td><td>"Host not approved for this environment." We are asking the AI Engine team to allowlist it.</td></tr>
+            <tr><td>Static page calling AI Engine from a browser</td><td><span class="chip closed">Closed</span></td><td>The API answers the CORS preflight with 401 and no CORS headers.</td></tr>
+            <tr><td>Laptop bridge</td><td><span class="chip open">Working</span></td><td>Tested end to end on Oct 20: real AI Engine verdict in 58 s, containment followed.</td></tr>
+            <tr><td>AI Engine GitHub connector</td><td><span class="chip check">Checking</span></td><td>Read only. Which objects it can read is still open; see below.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="cols">
+    <section>
+      <h2>Compared with the draft diagram</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Topic</th><th>Draft</th><th>Proposed</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td>"Watchtower" is the monitored system.</td><td>WatchTower is the monitor. The monitored side is the agents and the gateway.</td></tr>
+            <tr><td>Data source</td><td>GitHub issues, PRs and comments.</td><td>Gateway spans for every model and tool call. GitHub can add context through the connector.</td></tr>
+            <tr><td>GitHub to AI Engine</td><td>Webhooks.</td><td>Connector reads on demand. Webhooks cannot reach <code>eap.corp</code> from GitHub.com.</td></tr>
+            <tr><td>Anomaly rules</td><td>On the laptop, after AI Engine.</td><td>In WatchTower, before AI Engine. The laptop only relays.</td></tr>
+            <tr><td>Kill switch</td><td>Revoke token, stop agent.</td><td>Tiered: one key, one department VC, or the gateway's model VC.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>GitHub connector: what Lily is checking</h2>
+      <p class="lead">The connector runs as the connected user and can only read. Before we design the scenario around GitHub, we need these answers.</p>
+      <ul class="checks">
+        <li>Can it read comments on issues and PRs, including closed issues?</li>
+        <li>Can it list recent activity in a repo, such as new comments since a given time?</li>
+        <li>Does it see the raw comment body, so hidden HTML comments are visible to the analysis?</li>
+        <li>Which repos it reaches: personal, the org, or private repos the user can see.</li>
+        <li>How long a read takes, and whether there is a rate limit we would hit during a demo.</li>
+      </ul>
+    </section>
+  </div>
+
+  <section>
+    <h2>Where each containment tier acts</h2>
+    <div class="tiers">
+      <div class="tier t0"><span class="k">Tier 0</span><span class="t">Watch</span><span class="d">Flag the odd action on the dashboard. Nothing is blocked.</span></div>
+      <div class="tier t1"><span class="k">Tier 1</span><span class="t">One agent</span><span class="d">Block that agent's LiteLLM key at the gateway. Everyone else keeps working.</span></div>
+      <div class="tier t2"><span class="k">Tier 2</span><span class="t">One department</span><span class="d">Cut the department's Fabric VC to the gateway and alert its lead.</span></div>
+      <div class="tier t3"><span class="k">Tier 3</span><span class="t">The zone</span><span class="d">Cut the gateway's Fabric VC to the models, backups included. Departments in other zones keep running.</span></div>
+    </div>
+  </section>
+
+  <footer>© 2026 Equinix, Inc. Fabric API calls in this prototype are simulated.</footer>
+</main>
+</body>
+</html>

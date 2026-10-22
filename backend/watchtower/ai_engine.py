@@ -5,6 +5,9 @@ Modes (AI_ENGINE_MODE):
            Falls back to the latest recording, then to mock, if the call fails.
   replay — return the latest recording (for the recorded video / flaky network).
   mock   — build a deterministic analysis from the backend's own signals.
+  bridge — the backend cannot reach AI Engine (DAI-VM has no ZPA), so bridge/ai_engine_bridge.py
+           on a machine that can long-polls the backend, calls invoke() and posts the reply back.
+           Handled in app.py; falls back like live when no bridge answers.
 """
 
 import json
@@ -21,7 +24,7 @@ log = logging.getLogger("watchtower.ai_engine")
 BASE_URL = os.getenv("AI_ENGINE_BASE_URL", "https://prodentapigw.itaws.equinix.com/eap-backend/api")
 AGENT_NAME = os.getenv("WATCHTOWER_AGENT_NAME", "Equinix Agent WatchTower")
 RECORDINGS = Path(__file__).resolve().parent.parent / "recordings"
-TIMEOUT = float(os.getenv("AI_ENGINE_TIMEOUT", "120"))
+TIMEOUT = float(os.getenv("AI_ENGINE_TIMEOUT", "180"))  # runs have taken 60 s to over 120 s
 
 
 class AIEngineError(RuntimeError):
@@ -42,18 +45,17 @@ def list_agents() -> list[dict]:
     return r.json()
 
 
-_agent_id: str | None = os.getenv("WATCHTOWER_AGENT_ID") or None
+_agent_ids: dict[str, str] = {AGENT_NAME: os.environ["WATCHTOWER_AGENT_ID"]} if os.getenv("WATCHTOWER_AGENT_ID") else {}
 
 
-def agent_id() -> str:
-    global _agent_id
-    if _agent_id:
-        return _agent_id
+def agent_id(name: str = AGENT_NAME) -> str:
+    if name in _agent_ids:
+        return _agent_ids[name]
     for a in list_agents():
-        if a.get("name") == AGENT_NAME and a.get("deployment_status") == "ready":
-            _agent_id = a["agent_id"]
-            return _agent_id
-    raise AIEngineError(f"no ready agent named {AGENT_NAME!r}")
+        if a.get("name") == name and a.get("deployment_status") == "ready":
+            _agent_ids[name] = a["agent_id"]
+            return _agent_ids[name]
+    raise AIEngineError(f"no ready agent named {name!r}")
 
 
 def _parse_reply(body: dict) -> dict:
@@ -81,19 +83,21 @@ def _poll(result_url: str, deadline: float) -> dict:
     raise AIEngineError("timed out waiting for async run")
 
 
-def invoke(message: str) -> dict:
-    """Send one message to the WatchTower agent and return its parsed JSON reply."""
+def invoke(message: str, agent: str = AGENT_NAME, raw: bool = False) -> dict | str:
+    """Send one message to an AI Engine agent. Returns its parsed JSON reply, or its text when raw=True."""
     deadline = time.monotonic() + TIMEOUT
-    url = f"{BASE_URL}/v1/agents/{agent_id()}/invoke"
+    aid = agent_id(agent)
+    parse = (lambda body: (body.get("response") or "").strip()) if raw else _parse_reply
+    url = f"{BASE_URL}/v1/agents/{aid}/invoke"
     for attempt in range(3):
         # Fresh key per attempt: a 502'd run keeps its key reserved, so reusing it 409s.
         headers = {**_headers(), "Content-Type": "application/json", "Idempotency-Key": str(uuid.uuid4())}
         r = httpx.post(url, headers=headers, json={"message": message}, timeout=TIMEOUT)
         if r.status_code == 200:
-            return _parse_reply(r.json())
+            return parse(r.json())
         if r.status_code in (202, 409) and r.json().get("conversation_id"):
             conv = r.json()["conversation_id"]
-            return _parse_reply(_poll(f"/api/v1/agents/{agent_id()}/conversations/{conv}/messages", deadline))
+            return parse(_poll(f"/api/v1/agents/{aid}/conversations/{conv}/messages", deadline))
         if r.status_code in (429, 502) and attempt < 2:
             log.warning("invoke %s, retrying", r.status_code)
             time.sleep(float(r.headers.get("Retry-After", 3)))
@@ -129,7 +133,8 @@ def mock_analysis(window: dict) -> dict:
         "risk_level": level,
         "confidence": round(min(0.97, 0.5 + risk / 200), 2),
         "collective_intent": f"Agents with unrelated tasks repeatedly push the same change to {', '.join(h['resource'] for h in hot if h['sensitive'])[:120] or 'a shared resource'}.",
-        "summary": f"{len(agents)} agents with unrelated tasks converged on the same sensitive resource and coordinated through a shared file. Each step passed guardrails individually.",
+        "summary": (f"{len(agents)} agents with unrelated tasks converged on the same sensitive resource and coordinated through a shared file. Each step passed guardrails individually."
+                    if agents else "No cross-agent pattern in this window: no shared resource is being written by several agents."),
         "patterns": [p for p, s in (("Scratchpad coordination", "shared_scratchpad"), ("Resource convergence", "resource_fan_in"), ("Privilege ladder", "privilege_escalation")) if s in signals]
         + (["Concealment"] if injections else []),
         "involved_agents": agents,
@@ -149,22 +154,37 @@ def mock_analysis(window: dict) -> dict:
     }
 
 
-def analyze(window: dict) -> dict:
-    mode = os.getenv("AI_ENGINE_MODE", "live")
-    if mode == "mock":
-        return mock_analysis(window)
-    if mode == "replay":
-        return {**(_latest_recording() or mock_analysis(window)), "_source": "replay"}
+def mode() -> str:
+    return os.getenv("AI_ENGINE_MODE", "live")
+
+
+def build_message(window: dict) -> str:
     payload = {k: v for k, v in window.items() if k != "hotspots"}
     # Without an explicit budget the agent over-uses tools and hits its lookup limit before answering.
-    message = ("Analyze this observation window. Budget: call coordination_score at most once, load the "
-               "agent-coordination-patterns skill at most once, do not use code execution, and search the "
-               "knowledge base at most once. Then return the JSON verdict.\n" + json.dumps(payload))
+    return ("Analyze this observation window. Budget: call coordination_score at most once, load the "
+            "agent-coordination-patterns skill at most once, do not use code execution, and search the "
+            "knowledge base at most once. Then return the JSON verdict.\n" + json.dumps(payload))
+
+
+def fallback(window: dict) -> dict:
+    """What to show when AI Engine did not answer: the latest real analysis, else mock."""
+    recorded = _latest_recording()
+    return {**(recorded or mock_analysis(window)), "_source": "replay" if recorded else "mock", "_fallback": True}
+
+
+def save_recording(window: dict, analysis: dict) -> None:
+    _save_recording(window, analysis)
+
+
+def analyze(window: dict) -> dict:
+    if mode() == "mock":
+        return mock_analysis(window)
+    if mode() == "replay":
+        return {**(_latest_recording() or mock_analysis(window)), "_source": "replay"}
     try:
-        analysis = invoke(message)
+        analysis = invoke(build_message(window))
         _save_recording(window, analysis)
         return {**analysis, "_source": "ai_engine"}
     except (AIEngineError, httpx.HTTPError) as e:
         log.warning("AI Engine failed (%s); falling back", e)
-        fallback = _latest_recording()
-        return {**fallback, "_source": "replay"} if fallback else mock_analysis(window)
+        return fallback(window)
