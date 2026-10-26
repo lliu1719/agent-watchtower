@@ -392,7 +392,7 @@ def _propose(finding_key: str, tier: int, reason: str, agents=(), vcs=(), team: 
     state.pending[action["id"]] = action
     f = state.findings.get(finding_key)
     if f:
-        f["pending"] = {"id": action["id"], "label": label, "agents": agents, "vcs": vcs}
+        f["pending"] = {"id": action["id"], "label": label, "agents": agents, "vcs": vcs, "ts": action["ts"]}
         publish("finding", f)
     _incident()["trigger"] = _incident()["trigger"] or ("KILL_SWITCH" if vcs else "REVOKE_KEY")
     publish("incident", state.incident)
@@ -784,6 +784,7 @@ async def _watch_bridge() -> None:
 async def _start_bridge_watch():
     if ai_engine.mode() == "bridge":
         asyncio.create_task(_watch_bridge())
+    asyncio.create_task(factory.follow())
 
 
 @app.post("/api/agents/{agent_id}/isolate")
@@ -863,6 +864,9 @@ async def reset():
     state = State()
     publish("reset", state.snapshot())
     return {"reset": True}
+
+
+factory.on_reset = reset  # the agent factory's Reset / Restart starts WatchTower over too
 
 
 # One address or several, comma-separated: NOTIFY_EMAIL_TO=a@equinix.com,b@equinix.com

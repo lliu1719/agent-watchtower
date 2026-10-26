@@ -374,10 +374,10 @@ function renderTopbar() {
 function renderIncident() {
   const box = el('incident');
   const inc = S.incident;
-  // Closing the banner only hides it. A later event at revoke level or above, or anything waiting for a
-  // confirmation, brings it back.
+  // Closing the banner only hides it. A new event at revoke level or above, or a new action waiting for a
+  // confirmation, brings it back (ones already there when it was closed do not).
   const newer = bannerHiddenAt && [...S.findings.values()].some(f =>
-    f.pending || (TIERS[f.tier].rank >= TIERS.revoke.rank && findingTime(f) > bannerHiddenAt));
+    (f.pending && (f.pending.ts || f.ts) > bannerHiddenAt) || (TIERS[f.tier].rank >= TIERS.revoke.rank && f.ts > bannerHiddenAt));
   if (newer) bannerHiddenAt = null;
   const hidden = !!bannerHiddenAt;
   box.className = 'incident' + (inc && !hidden ? ' show' : '') + (inc?.status === 'resolved' ? ' resolved' : '');
@@ -393,14 +393,14 @@ function renderIncident() {
     el('incident-meta').textContent = `Opened ${fmtTime(inc.opened_at)} · resolved ${fmtTime(inc.resolved_at)} · all VCs restored, affected agents quarantined pending follow-up`;
   } else {
     const titles = {
-      KILL_ALL: `✖ Global kill switch: all ${plural(S.vcs.length, 'Fabric VC')} cut`,
-      KILL_SWITCH: `✖ Targeted kill switch: ${scope}`,
+      KILL_ALL: `▲ Global kill switch: all ${plural(S.vcs.length, 'Fabric VC')} cut`,
+      KILL_SWITCH: `▲ Targeted kill switch: ${scope}`,
       CONTAIN_AGENTS: `▲ Agents contained: ${scope}`,
       REVOKE_KEY: `▲ Gateway key revoked: ${isolated.join(', ')}`,
     };
     // Lead with what happened; what WatchTower did goes on the line below.
     const top = topFinding(false);
-    const icon = top?.tier === 'cut' ? '✖' : '▲';
+    const icon = '▲';  // not ✖: on the banner it looked like a close button
     el('incident-title').textContent = top && TIERS[top.tier].rank >= TIERS.revoke.rank
       ? `${icon} ${headline(top)}` : (titles[inc.trigger] || `▲ Operator containment: ${scope}`);
     const active = [...S.agents.values()].filter(running).map(a => a.agent_id);

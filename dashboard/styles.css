@@ -245,7 +245,6 @@ footer .fortress { height: 1.375rem; width: auto; opacity: 0.85; }
 
 /* Narrower screens: drop to two columns, AI panel moves below the graph */
 @media (max-width: 1800px) {
-  .tagline { display: none; }
   /* Laptop widths: events and their details side by side at the top, context below. */
   main { grid-template-columns: minmax(0, 1fr) 28.75rem; grid-template-areas: "graph ai" "risk roster" "compare compare"; }
   #ai .ai-body { max-height: none; }
@@ -322,7 +321,7 @@ button.ev:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2
 
 /* Demo mode (?demo): one row for recording. Agents | Events | Event details; nothing else competes. */
 html.demo main { grid-template-columns: 26rem minmax(0, 1fr) 31rem; grid-template-areas: "roster graph ai"; }
-html.demo #risk, html.demo #compare, html.demo footer, html.demo .tagline { display: none; }
+html.demo #risk, html.demo #compare, html.demo footer { display: none; }
 html.demo .events { min-height: 0; }
 html.demo main { height: calc(100vh - 5.5rem); }
 html.demo .incident.show ~ main { height: auto; }
@@ -337,3 +336,6 @@ html.demo .agent-row .task { display: none; }
 .incident button.approve-cut { background: var(--eq-white); color: var(--critical); border-color: var(--eq-white); font-weight: bold; margin-right: 0.75rem; }
 .incident button.incident-close { background: none; border: 0; color: inherit; font-size: 1.75rem; line-height: 1; min-width: 2.5rem; min-height: 2.5rem; margin-left: 0.5rem; padding: 0; opacity: 0.85; cursor: pointer; }
 .incident button.incident-close:hover { opacity: 1; background: rgba(255,255,255,0.12); }
+
+/* Product wordmark (the O is the eye) in place of the text title */
+.brand .wordmark { height: 3.1rem; width: auto; display: block; margin: 0.25rem 0 0.125rem; }

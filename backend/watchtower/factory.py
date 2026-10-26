@@ -22,6 +22,9 @@ URL = os.getenv("FACTORY_URL", "https://app-watchtower.solutionvalidation.center
 TOKEN = os.getenv("WATCHTOWER_TOKEN", "")
 TEAM_PREFIX = "wt-"
 _order = asyncio.Lock()
+POLL_S = float(os.getenv("FACTORY_POLL_S", "2"))
+running: bool | None = None  # the factory's story is playing (None: its state cannot be read)
+on_reset = None  # set by the app: called when the factory's story is reset or restarted
 on_tier = None  # set by the app: called with each tier above 0 as it is reported  # reports reach the page in the order WatchTower acted (asyncio.Lock wakes waiters FIFO)
 
 
@@ -50,6 +53,9 @@ async def _post(path: str, body: dict) -> bool:
 async def report(tier: int, text: str, feedback: dict | None = None, done: bool = True, **who) -> None:
     """One decision: the tier (agent= / department= / scope=) and, when the action ran, its resulting state."""
     if not enabled():
+        return
+    if running is False:  # the page is on standby after a Reset: a late decision would come back as a stale banner
+        log.info("factory report tier %s %s: skipped, the factory is not running", tier, who or "")
         return
     if tier > 0 and on_tier:
         on_tier(tier)
@@ -85,3 +91,30 @@ def restore(agents: list[str], departments: list[str], zone_was_cut: bool) -> No
         log.info("factory restore: %d agents, %d departments, zone %s", len(agents), len(departments), "up" if zone_was_cut else "unchanged")
 
     asyncio.get_running_loop().create_task(run())
+
+
+async def follow() -> None:
+    """Poll the factory's state (GET /api/wt/state) so WatchTower starts over with it: when its story is reset or
+    restarted, pending confirmations and findings from the old run must not reach the new one."""
+    global running
+    if not enabled():
+        return
+    was_running, last_step, warned = None, 0, False
+    async with httpx.AsyncClient(timeout=5) as client:
+        while True:
+            try:
+                r = await client.get(f"{URL}/api/wt/state", headers={"x-watchtower-token": TOKEN})
+                r.raise_for_status()
+                snap = r.json()
+                now, step = bool(snap.get("running")), int(snap.get("step") or 0)
+                if was_running is not None and ((was_running and not now) or (now and step < last_step)):
+                    log.info("factory reset seen (running %s -> %s, step %s -> %s): resetting WatchTower", was_running, now, last_step, step)
+                    if on_reset:
+                        await on_reset()
+                running, was_running, last_step, warned = now, now, step, False
+            except (httpx.HTTPError, ValueError) as e:
+                running = None  # unknown: report as before
+                if not warned:
+                    log.warning("factory state unreadable (%s): reports are sent without checking it", getattr(getattr(e, "response", None), "status_code", type(e).__name__))
+                    warned = True
+            await asyncio.sleep(POLL_S)

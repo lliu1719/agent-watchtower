@@ -10,4 +10,7 @@ backend/data/
 # slide decks are shared by hand, not versioned here (PowerPoint lock files too)
 docs/*.pptx
 docs/*.pdf
+docs/*.mov
+docs/*.mp4
 docs/~$*
+.env.*

@@ -9,3 +9,5 @@ backend/data/
 # slide decks are shared by hand, not deployed
 docs/*.pptx
 docs/*.pdf
+docs/*.mov
+docs/*.mp4
