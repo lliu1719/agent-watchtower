@@ -70,7 +70,8 @@ const S = {
   selected: null,       // finding id shown in Event details
 };
 let pendingActivity = [];  // events since the last activity summary
-let pickedAt = 0;          // when the viewer last clicked an event; auto-selection waits a while after
+let pickedAt = 0;
+let bannerHiddenAt = null;  // when the viewer closed the incident banner; it returns when something newer needs them          // when the viewer last clicked an event; auto-selection waits a while after
 let evtSource = null;
 let renderedAnalysis;
 let seenActions = 0;   // incident.actions already written to the WatchTower feed  // undefined = AI panel body must be redrawn
@@ -373,7 +374,13 @@ function renderTopbar() {
 function renderIncident() {
   const box = el('incident');
   const inc = S.incident;
-  box.className = 'incident' + (inc ? ' show' : '') + (inc?.status === 'resolved' ? ' resolved' : '');
+  // Closing the banner only hides it. A later event at revoke level or above, or anything waiting for a
+  // confirmation, brings it back.
+  const newer = bannerHiddenAt && [...S.findings.values()].some(f =>
+    f.pending || (TIERS[f.tier].rank >= TIERS.revoke.rank && findingTime(f) > bannerHiddenAt));
+  if (newer) bannerHiddenAt = null;
+  const hidden = !!bannerHiddenAt;
+  box.className = 'incident' + (inc && !hidden ? ' show' : '') + (inc?.status === 'resolved' ? ' resolved' : '');
   if (!inc) return;
 
   const cut = inc.actions.filter(x => x.type === 'cut_vc').map(x => x.target);
@@ -405,7 +412,18 @@ function renderIncident() {
     parts.push(inc.notified ? 'Slack notified' : 'Notification logged');
     el('incident-meta').textContent = parts.join(' · ');
   }
-  el('btn-approve').style.display = inc.status === 'pending_review' ? '' : 'none';
+  // Restore only makes sense once something was actually blocked.
+  // Restore only once something was blocked, and never next to a pending Confirm: the two were easy to mix up.
+  const anyPending = [...S.findings.values()].some(f => f.pending);
+  el('btn-approve').style.display = inc.status === 'pending_review' && inc.actions.length && !anyPending ? '' : 'none';
+  // A proposed action waits for a person: offer the confirmation right on the banner (oldest first).
+  const waiting = [...S.findings.values()].filter(f => f.pending).sort((a, b) => a.ts.localeCompare(b.ts))[0];
+  const cutBtn = el('btn-approve-cut');
+  cutBtn.hidden = !waiting;
+  if (waiting) {
+    cutBtn.dataset.action = waiting.pending.id;
+    cutBtn.textContent = `Confirm: ${waiting.pending.label}`;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -549,6 +567,7 @@ function renderEvents() {
           <div class="ev-what">${esc(f.what)}${f.source === 'ai_engine' ? ' <span class="ev-src">AI Engine</span>' : ''}</div>
           ${f.detail ? `<div class="ev-detail">${esc(f.detail)}</div>` : ''}
           ${f.response ? `<div class="ev-resp">WatchTower: ${esc(f.response)}</div>` : ''}
+          ${f.pending ? `<div class="ev-await">Waiting for your confirmation: ${esc(f.pending.label)}</div>` : ''}
         </div>
       </button>`;
   }).join('');
@@ -565,9 +584,14 @@ function renderDetail() {
   const agents = f.agents.map(id => S.agents.get(id)).filter(Boolean);
   const vcs = [...new Set(agents.map(a => a.vc_id))].map(id => S.vcs.find(v => v.vc_id === id)).filter(Boolean);
   const isolatable = agents.filter(running);
+  const proposal = f.pending;
   const buttons = [
-    ...isolatable.slice(0, 4).map(a => `<button data-isolate="${esc(a.agent_id)}" title="Revoke this agent's AI Gateway key">Revoke ${esc(a.agent_id)}</button>`),
-    ...vcs.filter(v => v.state === 'UP').map(v => `<button class="${f.tier === 'cut' ? 'danger' : ''}" data-cut="${esc(v.vc_id)}" title="Delete this Fabric VC; every agent behind it loses the model">Cut ${esc(v.vc_id)}</button>`),
+    ...(proposal ? [
+      `<button class="danger" data-confirm-action="${esc(proposal.id)}" title="WatchTower acts only when a person confirms">Confirm: ${esc(proposal.label)}</button>`,
+      `<button data-decline-action="${esc(proposal.id)}" title="Do not take this action">Decline</button>`,
+    ] : []),
+    ...(proposal ? [] : isolatable).slice(0, 4).map(a => `<button data-isolate="${esc(a.agent_id)}" title="Revoke this agent's AI Gateway key">Revoke ${esc(a.agent_id)}</button>`),
+    ...(proposal ? [] : vcs).filter(v => v.state === 'UP').map(v => `<button class="${f.tier === 'cut' ? 'danger' : ''}" data-cut="${esc(v.vc_id)}" title="Delete this Fabric VC; every agent behind it loses the model">Cut ${esc(v.vc_id)}</button>`),
     `<button data-analyze="1" ${S.analyzing ? 'disabled' : ''} title="Send the current window to Equinix AI Engine">${S.analyzing ? 'AI Engine is analyzing…' : 'Ask AI Engine'}</button>`,
     emailButton(f),
     f.status === 'open' ? `<button data-ack="${esc(f.id)}" title="Mark as seen; keeps it in the feed">Acknowledge</button>` : '',
@@ -604,13 +628,16 @@ function maybeToast(f, prev) {
   const rank = TIERS[f.tier].rank;
   const analysisDone = f.key.startsWith('analysis:') && !prev;
   const escalated = rank >= TIERS.revoke.rank && (!prev || TIERS[prev.tier].rank < rank);
-  if (analysisDone || escalated) toast(f);
+  const approvalNeeded = f.pending && !prev?.pending;
+  if (analysisDone || escalated || approvalNeeded) toast(f);
 }
 
 function toast(f) {
   const t = TIERS[f.tier] || TIERS.info;
   const box = el('toasts');
+  box.querySelector(`[data-finding-toast="${CSS.escape(f.id)}"]`)?.remove();  // one card per event: the newest wording wins
   const card = document.createElement('div');
+  card.dataset.findingToast = f.id;
   card.className = `toast tier-${t.cls}`;
   card.setAttribute('role', 'status');
   card.innerHTML = `
@@ -620,9 +647,14 @@ function toast(f) {
       <button class="toast-close" aria-label="Close notification" title="Close">×</button>
     </div>
     <div class="toast-what">${esc(f.what)}</div>
+    ${f.pending ? `<div class="toast-resp"><b>Confirmation needed:</b> ${esc(f.pending.label)}.</div>` : ''}
     ${f.response ? `<div class="toast-resp">WatchTower: ${esc(f.response)}</div>` : ''}
-    <div class="toast-actions"><button class="toast-review">Review</button></div>`;
+    <div class="toast-actions">${f.pending ? `<button class="danger toast-confirm">Confirm</button>` : ''}<button class="toast-review">Review</button></div>`;
   card.querySelector('.toast-close').addEventListener('click', () => card.remove());
+  card.querySelector('.toast-confirm')?.addEventListener('click', () => {
+    post(`/api/actions/${encodeURIComponent(f.pending.id)}/confirm`);
+    card.remove();
+  });
   card.querySelector('.toast-review').addEventListener('click', () => {
     S.selected = f.id;
     pickedAt = Date.now();
@@ -631,10 +663,16 @@ function toast(f) {
     el('ai').scrollIntoView({ behavior: 'smooth', block: 'start' });
     card.remove();
   });
-  // Close on its own after a while (it can cover the action buttons); hovering keeps it open.
-  let timer = setTimeout(() => card.remove(), TOAST_MS);
-  card.addEventListener('mouseenter', () => clearTimeout(timer));
-  card.addEventListener('mouseleave', () => { timer = setTimeout(() => card.remove(), TOAST_MS / 2); });
+  // Watch and revoke notices close on their own (they can cover the action buttons); a cut or an approval
+  // request stays until closed. Nothing closes while the tab is in the background, so it is there on return.
+  const sticky = f.tier === 'cut' || f.pending;
+  let timer;
+  const close = () => { if (document.hidden) timer = setTimeout(close, 2000); else card.remove(); };
+  if (!sticky) {
+    timer = setTimeout(close, TOAST_MS);
+    card.addEventListener('mouseenter', () => clearTimeout(timer));
+    card.addEventListener('mouseleave', () => { timer = setTimeout(close, TOAST_MS / 2); });
+  }
   box.prepend(card);
   while (box.childElementCount > MAX_TOASTS) box.lastElementChild.remove();
 }
@@ -663,6 +701,8 @@ function initEvents() {
     if (b.dataset.cut && confirm(`Cut Fabric VC ${b.dataset.cut}? Every agent behind it loses the model.`)) post(`/api/vcs/${encodeURIComponent(b.dataset.cut)}/cut`);
     if (b.dataset.analyze) post('/api/analyze');
     if (b.dataset.ack) post(`/api/findings/${encodeURIComponent(b.dataset.ack)}/ack`);
+    if (b.dataset.confirmAction) post(`/api/actions/${encodeURIComponent(b.dataset.confirmAction)}/confirm`);
+    if (b.dataset.declineAction) post(`/api/actions/${encodeURIComponent(b.dataset.declineAction)}/decline`);
     if (b.dataset.email) post(`/api/findings/${encodeURIComponent(b.dataset.email)}/email`);
   });
   setInterval(summarizeActivity, ACTIVITY_EVERY_MS);
@@ -1074,6 +1114,14 @@ function initControls() {
     if (b.dataset.cut && confirm(`Cut Fabric VC ${b.dataset.cut}? Every agent behind it loses the model.`)) post(`/api/vcs/${encodeURIComponent(b.dataset.cut)}/cut`);
   });
   el('btn-approve').addEventListener('click', () => post('/api/review/approve'));
+  el('btn-incident-close').addEventListener('click', () => {
+    bannerHiddenAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    schedule(renderIncident);
+  });
+  el('btn-approve-cut').addEventListener('click', (e) => {
+    const id = e.currentTarget.dataset.action;
+    if (id) post(`/api/actions/${encodeURIComponent(id)}/confirm`);
+  });
   el('btn-run').addEventListener('click', () => post('/api/scenario/run', { scenario: el('scenario').value, speed: parseFloat(el('speed').value) }));
   loadScenarios();
   el('btn-reset').addEventListener('click', () => post('/api/reset'));

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Equinix Agent WatchTower</title>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body>
   <header class="topbar">
@@ -29,7 +29,9 @@
       <div class="meta" id="incident-meta"></div>
     </div>
     <div class="spacer"></div>
-    <button id="btn-approve">Approve restore after review</button>
+    <button class="approve-cut" id="btn-approve-cut" hidden>Confirm</button>
+    <button id="btn-approve" title="Ends the incident: every VC comes back up and agents are released for follow-up">End incident: restore access</button>
+    <button class="incident-close" id="btn-incident-close" aria-label="Hide this banner" title="Hide the banner. Nothing is restored; it comes back if something new needs you.">×</button>
   </div>
 
   <main>
@@ -141,6 +143,6 @@
   <script src="vendor/d3-array.min.js"></script>
   <script src="vendor/d3-geo.min.js"></script>
   <script src="vendor/topojson-client.min.js"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>

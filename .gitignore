@@ -6,3 +6,8 @@ node_modules/
 .venv/
 backend/recordings/
 backend/data/
+
+# slide decks are shared by hand, not versioned here (PowerPoint lock files too)
+docs/*.pptx
+docs/*.pdf
+docs/~$*

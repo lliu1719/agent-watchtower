@@ -6,3 +6,6 @@
 **/__pycache__/
 backend/recordings/
 backend/data/
+# slide decks are shared by hand, not deployed
+docs/*.pptx
+docs/*.pdf

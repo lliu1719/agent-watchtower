@@ -68,6 +68,8 @@ class State:
         self.findings: dict[str, dict] = {}  # key -> event summary shown in the dashboard's Events feed
         self.alert_keys: set[tuple[str, str]] = set()
         self.factory_blocked = {"agents": set(), "departments": set()}  # what we told the agent factory's page
+        self.factory_max_tier = 0  # the story on the factory's page never steps back; only Reset starts it over
+        self.pending: dict[str, dict] = {}  # actions WatchTower proposed (revoke keys, cut VCs); a person confirms each one
         self.analysis: dict | None = None
         self.analysis_key: str | None = None
         self.analyzing = False
@@ -327,6 +329,11 @@ async def run_analysis() -> None:
     action = containment.decide(analysis, state.signals)
     if action != "MONITOR" and AUTO_CONTAIN and not state.auto_contained:
         await contain(action, analysis)
+    f = state.findings.get(state.analysis_key)
+    if f and not f["response"]:  # the verdict informs the reviewer; WatchTower took no action of its own on it
+        waiting = [p["label"] for p in state.pending.values()]
+        _finding(f["key"], f["tier"], f["what"], response="No action on this verdict alone." +
+                 (f" Still waiting for your confirmation: {'; '.join(waiting)}." if waiting else ""))
 
 
 def _incident() -> dict:
@@ -337,15 +344,15 @@ def _incident() -> dict:
     return state.incident
 
 
-def _isolate(agent_id: str, by: str, reason: str | None = None) -> bool:
+def _isolate(agent_id: str, by: str, reason: str | None = None, report: bool = True) -> bool:
     agent = state.agents.get(agent_id)
     if not agent or agent["status"] in ("contained", "severed"):
         return False
     agent["status"] = "contained"
     _incident()["actions"].append({"type": "isolate_agent", "target": agent_id, "by": by, "ts": _now(), "reason": reason})
-    if factory.department(agent["owner"]):
+    if report and factory.department(agent["owner"]):
         state.factory_blocked["agents"].add(agent_id)
-        factory.send(1, f"WatchTower deleted {agent_id}'s LiteLLM key{': ' + reason if reason else ''}",
+        factory.send(1, f"WatchTower revoked {agent_id}'s key{'. ' + reason if reason else ''}",
                      feedback={"agent": agent_id, "state": "blocked"}, agent=agent_id)
     return True
 
@@ -363,9 +370,72 @@ def _cut(vc_id: str, by: str) -> bool:
     dept = factory.department(vc.get("owner"))
     if dept:
         state.factory_blocked["departments"].add(dept)
-        factory.send(2, f"WatchTower cut Fabric VC {vc_id}: every {vc['owner']} agent lost the model",
-                     feedback={"department": dept, "state": "blocked"}, department=dept, scope="department")
     return True
+
+
+def _propose(finding_key: str, tier: int, reason: str, agents=(), vcs=(), team: str | None = None) -> dict | None:
+    """WatchTower proposes an action and a person confirms it: nothing is revoked or cut, and nothing is
+    reported to the agent factory's page, until then."""
+    taken = {a for p in state.pending.values() for a in p["agents"]} | {v for p in state.pending.values() for v in p["vcs"]}
+    agents = sorted(a for a in agents if running_agent(a) and a not in taken)
+    vcs = sorted(v for v in vcs if state.vcs.get(v, {}).get("state") == "UP" and v not in taken)
+    if not agents and not vcs:
+        return None
+    if vcs:
+        label = (f"Revoke {len(agents)} key{'s' if len(agents) != 1 else ''} and cut " if agents else "Cut ") + ", ".join(vcs)
+    elif team:
+        label = f"Revoke every {team} key ({len(agents)})"
+    else:
+        label = f"Revoke {', '.join(agents)}'s key" if len(agents) == 1 else f"Revoke {len(agents)} keys"
+    action = {"id": f"act-{len(state.pending) + 1:02d}-{uuid.uuid4().hex[:4]}", "tier": tier, "agents": agents, "vcs": vcs,
+              "team": team, "label": label, "reason": reason, "finding_key": finding_key, "ts": _now()}
+    state.pending[action["id"]] = action
+    f = state.findings.get(finding_key)
+    if f:
+        f["pending"] = {"id": action["id"], "label": label, "agents": agents, "vcs": vcs}
+        publish("finding", f)
+    _incident()["trigger"] = _incident()["trigger"] or ("KILL_SWITCH" if vcs else "REVOKE_KEY")
+    publish("incident", state.incident)
+    if f:  # the administrator hears about it at once, through AI Engine (Microsoft 365)
+        _queue_email(f, reason="needs your confirmation")
+    return action
+
+
+def running_agent(agent_id: str) -> bool:
+    return state.agents.get(agent_id, {}).get("status") in ("active", "warning")
+
+
+async def _carry_out(action: dict, by: str) -> str:
+    """Do a confirmed action, then tell the agent factory's page what was done."""
+    revoked = [a for a in action["agents"] if _isolate(a, by, action["reason"], report=False)]
+    cut = [v for v in action["vcs"] if _cut(v, by)]
+    incident = _incident()
+    incident["involved_agents"] = sorted(set(incident["involved_agents"]) | set(action["agents"]))
+    parts = []
+    if revoked:
+        parts.append(f"revoked {'the key of ' + revoked[0] if len(revoked) == 1 else str(len(revoked)) + ' keys'}")
+    if cut:
+        parts.append(f"cut Fabric VC{'s' if len(cut) > 1 else ''} {', '.join(cut)}")
+    done = "Confirmed: " + (" and ".join(parts) if parts else "nothing left to do; already contained") + "."
+
+    owners = {state.agents[a]["owner"] for a in action["agents"] if a in state.agents} | {state.vcs[v]["owner"] for v in action["vcs"]}
+    if any(factory.department(o) for o in owners) and (revoked or cut):
+        if action["tier"] == 1 and revoked:
+            a = revoked[0]
+            state.factory_blocked["agents"].add(a)
+            factory.send(1, f"WatchTower confirmed: {a}'s key is revoked. {action['reason']}", feedback={"agent": a, "state": "blocked"}, agent=a)
+        elif action["tier"] == 2:
+            dept = factory.department(action["team"])
+            state.factory_blocked["departments"].add(dept)
+            factory.send(2, f"WatchTower confirmed: every {action['team']} key is revoked. {action['reason']}",
+                         feedback={"department": dept, "state": "blocked"}, department=dept, scope="department")
+        elif action["tier"] == 3:
+            for dept in sorted({factory.department(o) for o in owners} - {None}):
+                state.factory_blocked["departments"].add(dept)
+            factory.send(3, f"WatchTower confirmed: the model zone is cut (Fabric VC{'s' if len(cut) > 1 else ''} {', '.join(cut)}).",
+                         feedback={"zone": "cut"}, scope="enterprise")
+    await _announce(f":lock: WatchTower ({by}): {done} {action['reason']}")
+    return done
 
 
 async def _announce(text: str) -> None:
@@ -388,21 +458,29 @@ async def _contain_late_joiner(event: dict) -> None:
     targets = set(state.analysis.get("target_resources") or [])
     if event["resource"] in targets and event["action"] == "data_write":
         reason = f"wrote {event['resource']} after containment"
-        if _isolate(event["agent_id"], "auto", reason):
-            incident["involved_agents"] = sorted(set(incident["involved_agents"]) | {event["agent_id"]})
-            # Once every agent on a VC has joined, the whole team is in on it: cut the VC too.
-            vc_id = state.agents[event["agent_id"]]["vc_id"]
-            on_vc = set(state.agents_by_vc().get(vc_id, []))
-            what = f"{event['agent_id']} wrote {event['resource']} after containment had started"
-            if incident["trigger"] == "KILL_SWITCH" and on_vc <= set(incident["involved_agents"]) and _cut(vc_id, "auto"):
-                _finding(f"late:{event['agent_id']}", "cut", what, f"Every agent on {vc_id} is now involved.",
-                         agents=on_vc, response=f"Revoked its key and cut Fabric VC {vc_id}: the whole team had joined.")
-                await _announce(f":rotating_light: WatchTower: every agent on {vc_id} has joined; cut the Fabric VC.")
-            else:
-                _finding(f"late:{event['agent_id']}", "revoke", what, "", agents=[event["agent_id"]],
-                         response="Revoked its gateway key.")
-                await _announce(f":lock: WatchTower: isolated {event['agent_id']} at the AI Gateway; it {reason}.")
+        key, what = f"late:{event['agent_id']}", f"{event['agent_id']} wrote {event['resource']} after containment had started"
+        if key in state.findings or not running_agent(event["agent_id"]):
+            return
+        incident["involved_agents"] = sorted(set(incident["involved_agents"]) | {event["agent_id"]})
+        # Once every agent on a VC has joined, the whole team is in on it: propose the VC as well.
+        vc_id = state.agents[event["agent_id"]]["vc_id"]
+        on_vc = set(state.agents_by_vc().get(vc_id, []))
+        whole_team = incident["trigger"] == "KILL_SWITCH" and on_vc <= set(incident["involved_agents"]) and state.vcs[vc_id]["state"] == "UP"
+        _isolate(event["agent_id"], "auto", reason)
+        response = (f"Revoked its key. Proposed cutting Fabric VC {vc_id}, since the whole team has joined: waiting for your confirmation."
+                    if whole_team else "Revoked its gateway key.")
+        _finding(key, "cut" if whole_team else "revoke", what, f"Every agent on {vc_id} is now involved." if whole_team else "",
+                 agents=on_vc if whole_team else [event["agent_id"]], response=response)
+        if whole_team:
+            _propose(key, 3, what, vcs=[vc_id])
+        await _announce(f":lock: WatchTower: {what}. {response}")
 
+
+def _factory_tier(tier: int) -> None:
+    state.factory_max_tier = max(state.factory_max_tier, tier)
+
+
+factory.on_tier = _factory_tier
 
 TIER_ORDER = ("info", "watch", "revoke", "cut")
 
@@ -476,10 +554,10 @@ async def _respond_to_agent_alerts() -> None:
             agent["alert"] = alert["title"]
             response, tier = "Flagged the agent for review. Nothing is blocked yet.", "watch"
             publish("agent", agent)
-            # Tier 0 tells the factory's story only before anything was blocked; later it is noise on its page.
-            if factory.department(agent["owner"]) and not (state.factory_blocked["agents"] or state.factory_blocked["departments"]):
+            # Tier 0 tells the factory's story only until a higher tier was reported; after that it would step its page back.
+            if factory.department(agent["owner"]) and state.factory_max_tier == 0:
                 factory.send(0, f"WatchTower is watching {agent['agent_id']}: {alert['title']}", done=True, agent=agent["agent_id"])
-        elif alert["tier"] == "revoke":
+        elif alert["tier"] == "revoke":  # tier 1: one agent's key, at once
             if _isolate(agent["agent_id"], "auto", alert["title"]):
                 incident = _incident()
                 incident["trigger"] = incident["trigger"] or "REVOKE_KEY"
@@ -490,21 +568,25 @@ async def _respond_to_agent_alerts() -> None:
             else:
                 response = "Already contained."
             tier = "revoke"
-        else:  # cut_team | cut_zone
-            teams = [alert["team"]] if alert["tier"] == "cut_team" else alert["teams"]
+        elif alert["tier"] == "cut_team":  # tier 2: every key of the department, no VC cut
+            involved = sorted(a["agent_id"] for a in state.agents.values() if a["owner"] == alert["team"])
+            still = [a for a in involved if running_agent(a)]
+            response, tier = (f"Proposed revoking the key of every {alert['team']} agent still running ({len(still)}): waiting for your confirmation."
+                              if still else "Every key in the team is already revoked."), "revoke"
+            _finding(f"{alert['type']}:{scope}", tier, alert["title"], alert["detail"], agents=involved, response=response)
+            _propose(f"{alert['type']}:{scope}", 2, alert["title"], agents=involved, team=alert["team"])
+        else:  # cut_zone, tier 3: every involved key and the VCs to the models
+            teams = alert["teams"]
+            involved = sorted(a["agent_id"] for a in state.agents.values() if a["owner"] in teams)
             vcs = sorted({a["vc_id"] for a in state.agents.values() if a["owner"] in teams})
-            cut = [vc for vc in vcs if _cut(vc, "auto")]
-            incident = _incident()
-            incident["trigger"] = incident["trigger"] or "KILL_SWITCH"
-            incident["involved_agents"] = sorted(set(incident["involved_agents"]) | set(involved))
-            response = (f"Cut Fabric VC{'s' if len(cut) > 1 else ''} {', '.join(cut)}: every agent behind {'them' if len(cut) > 1 else 'it'} lost the model."
-                        if cut else "Those Fabric VCs were already down.")
-            if alert["tier"] == "cut_zone" and cut:
-                down = sorted(vc for vc in vcs if state.vcs[vc]["state"] == "DOWN")
-                factory.send(3, f"WatchTower cut the model zone: Fabric VCs {', '.join(down)} are down; teams outside it keep running.",
-                             feedback={"zone": "cut"}, scope="enterprise")
-            await _announce(f":rotating_light: WatchTower: {alert['title']}. {response}")
-            tier = "cut"
+            response, tier = (f"Proposed revoking every key in {', '.join(teams)} and cutting Fabric VC{'s' if len(vcs) > 1 else ''} "
+                              f"{', '.join(vcs)} to the models: waiting for your confirmation. "
+                              "Sent the window to Equinix AI Engine for its analysis."), "cut"
+            _finding(f"{alert['type']}:{scope}", tier, alert["title"], alert["detail"], agents=involved, response=response)
+            _propose(f"{alert['type']}:{scope}", 3, alert["title"], agents=involved, vcs=vcs)
+            # Tier 3 asks AI Engine on its own, so the reviewer has its verdict before confirming the cut.
+            if not state.analyzing:
+                asyncio.create_task(run_analysis())
         _finding(f"{alert['type']}:{scope}", tier, alert["title"], alert["detail"], agents=involved, response=response)
         alert["response"] = response
         state.alerts.append(alert)
@@ -523,21 +605,19 @@ async def contain(action: str, analysis: dict | None) -> None:
     incident = _incident()
     incident["trigger"] = incident["trigger"] or action
     incident["involved_agents"] = sorted(set(incident["involved_agents"]) | set(involved))
-    for vc_id in steps["cut_vcs"]:
-        _cut(vc_id, "auto")
-    for agent_id in steps["revoke_agents"]:
-        _isolate(agent_id, "auto")
+    # Nothing happens until a person confirms: propose the keys (and any VC where every agent is involved).
+    revoked = sorted(set(involved) | set(steps["revoke_agents"]))
     state.auto_contained = True
-    done = [f"cut Fabric VC{'s' if len(steps['cut_vcs']) > 1 else ''} {', '.join(steps['cut_vcs'])}" if steps["cut_vcs"] else "",
-            f"revoked the gateway keys of {', '.join(steps['revoke_agents'])}" if steps["revoke_agents"] else ""]
+    response = f"Proposed revoking the gateway keys of {', '.join(revoked)}"
+    response += (f" and cutting Fabric VC{'s' if len(steps['cut_vcs']) > 1 else ''} {', '.join(steps['cut_vcs'])}, where every agent is involved"
+                 if steps["cut_vcs"] else "") + ": waiting for your confirmation."
     if state.analysis_key:
-        _finding(state.analysis_key, "cut" if steps["cut_vcs"] else "revoke", state.findings[state.analysis_key]["what"],
-                 response=" and ".join(d for d in done if d).replace("cut", "Cut", 1).replace("revoked", "Revoked", 1 if not steps["cut_vcs"] else 0)
-                 + ". A reviewer must approve before access returns.")
+        _finding(state.analysis_key, "cut" if steps["cut_vcs"] else "revoke", state.findings[state.analysis_key]["what"], response=response)
+        _propose(state.analysis_key, 3 if steps["cut_vcs"] else 1, analysis.get("summary", "AI Engine verdict"),
+                 agents=revoked, vcs=steps["cut_vcs"])
     await _announce(
         f":rotating_light: WatchTower {action}: {analysis.get('summary', '')} "
-        f"Cut VCs: {', '.join(steps['cut_vcs']) or 'none'}. Revoked agents: {', '.join(steps['revoke_agents']) or 'none'}. "
-        "Human review required to restore.")
+        f"Awaiting confirmation: revoke {', '.join(revoked)}; cut {', '.join(steps['cut_vcs']) or 'no VC'}.")
 
 
 @app.post("/api/agents/register")
@@ -755,7 +835,9 @@ async def approve_restore():
     factory.restore(sorted(state.factory_blocked["agents"]), sorted(state.factory_blocked["departments"]),
                     zone_was_cut=len(state.factory_blocked["departments"]) > 1)
     state.factory_blocked = {"agents": set(), "departments": set()}
+    state.pending.clear()
     for f in state.findings.values():
+        f["pending"] = None
         if f["status"] in ("open", "acknowledged"):
             f["status"] = "resolved"
     _finding(f"review:{_now()}", "info", "A reviewer approved restoring access",
@@ -794,6 +876,9 @@ def _email_for(f: dict) -> tuple[str, str]:
     lines = [f["what"] + ".", ""]
     if f["detail"]:
         lines += [f["detail"], ""]
+    if f.get("pending"):
+        lines += [f"WatchTower is waiting for your confirmation: {f['pending']['label']}.",
+                  f"Confirm or decline it on the dashboard: {DASHBOARD_URL}", ""]
     lines += [f"What WatchTower did: {f['response'] or 'Nothing yet.'}", ""]
     if f["agents"]:
         lines.append("Agents involved:")
@@ -803,7 +888,8 @@ def _email_for(f: dict) -> tuple[str, str]:
     if state.analysis and not state.analysis.get("_fallback"):
         lines += [f"AI Engine: {state.analysis.get('verdict')} / {state.analysis.get('risk_level')}. {state.analysis.get('summary', '')}", ""]
     lines += [f"Seen at {f['ts']} (UTC). Review it on the dashboard: {DASHBOARD_URL}", "", "Sent by Equinix Agent WatchTower."]
-    return f"[WatchTower] {TIER_LABELS.get(f['tier'], f['tier'])}: {f['what']}"[:200], "\n".join(lines)
+    head = f"Confirm: {f['pending']['label']}" if f.get("pending") else TIER_LABELS.get(f["tier"], f["tier"])
+    return f"[WatchTower] {head}: {f['what']}"[:200], "\n".join(lines)
 
 
 @app.post("/api/findings/{finding_id}/email")
@@ -817,19 +903,59 @@ async def email_finding(finding_id: str):
     if ai_engine.mode() != "bridge" or not bridge.online():
         return JSONResponse({"error": "No bridge is online. Start bridge/ai_engine_bridge.py on a laptop on Zscaler ZPA."},
                             status_code=409)
+    _queue_email(f, reason="operator request")
+    return f
+
+
+def _queue_email(f: dict, reason: str) -> None:
+    """Hand one event to the bridge, which has AI Engine email it (Microsoft 365) to NOTIFY_EMAIL_TO."""
+    if not NOTIFY_EMAIL_TO:
+        return
+    if ai_engine.mode() != "bridge" or not bridge.online():
+        f["email"] = {"status": "failed", "to": NOTIFY_EMAIL_TO, "ts": _now(),
+                      "error": "no bridge was online to reach AI Engine; start the bridge, then press Email me"}
+        publish("finding", f)
+        return
     subject, body = _email_for(f)
 
     def done(ok: bool, error: str | None, pending: bool = False) -> None:
         status = "sent" if ok else "approval" if pending else "failed"
         f["email"] = {"status": status, "to": NOTIFY_EMAIL_TO, "ts": _now(), "error": error}
         publish("finding", f)
-        log.info("email for %s: %s", f["id"], status if ok else f"{status} ({error})")
+        log.info("email for %s (%s): %s", f["id"], reason, status if ok else f"{status} ({error})")
 
     job = bridge.send_email(NOTIFY_EMAIL_TO, subject, body, done)
     f["email"] = {"status": "sending", "to": NOTIFY_EMAIL_TO, "ts": _now(), "error": None}
     publish("finding", f)
     asyncio.get_running_loop().call_later(EMAIL_PICKUP_S, bridge.expire, job["job_id"], "the bridge did not pick it up in time")
-    return f
+
+
+@app.post("/api/actions/{action_id}/confirm")
+@app.post("/api/cuts/{action_id}/approve")
+async def confirm_action(action_id: str):
+    """A person confirms a proposed action: revoke the keys and cut the VCs it names, then report it."""
+    action = state.pending.pop(action_id, None)
+    if not action:
+        return JSONResponse({"error": "no proposed action with that id (already confirmed or declined)"}, status_code=404)
+    done = await _carry_out(action, "reviewer")
+    f = state.findings.get(action["finding_key"])
+    if f:
+        f["pending"] = None
+        _finding(f["key"], f["tier"], f["what"], response=done)
+    return {"done": done}
+
+
+@app.post("/api/actions/{action_id}/decline")
+@app.post("/api/cuts/{action_id}/dismiss")
+async def decline_action(action_id: str):
+    action = state.pending.pop(action_id, None)
+    if not action:
+        return JSONResponse({"error": "no proposed action with that id"}, status_code=404)
+    f = state.findings.get(action["finding_key"])
+    if f:
+        f["pending"] = None
+        _finding(f["key"], f["tier"], f["what"], response=f"Declined by a reviewer: {action['label'][0].lower() + action['label'][1:]} was not done.")
+    return {"declined": action["label"]}
 
 
 @app.post("/api/findings/{finding_id}/ack")

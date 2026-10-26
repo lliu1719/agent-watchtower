@@ -21,7 +21,8 @@ log = logging.getLogger("watchtower.factory")
 URL = os.getenv("FACTORY_URL", "https://app-watchtower.solutionvalidation.center").rstrip("/")
 TOKEN = os.getenv("WATCHTOWER_TOKEN", "")
 TEAM_PREFIX = "wt-"
-_order = asyncio.Lock()  # reports reach the page in the order WatchTower acted (asyncio.Lock wakes waiters FIFO)
+_order = asyncio.Lock()
+on_tier = None  # set by the app: called with each tier above 0 as it is reported  # reports reach the page in the order WatchTower acted (asyncio.Lock wakes waiters FIFO)
 
 
 def department(owner: str | None) -> str | None:
@@ -50,6 +51,8 @@ async def report(tier: int, text: str, feedback: dict | None = None, done: bool 
     """One decision: the tier (agent= / department= / scope=) and, when the action ran, its resulting state."""
     if not enabled():
         return
+    if tier > 0 and on_tier:
+        on_tier(tier)
     async with _order:
         ok = await _post("/api/wt/tier", {"tier": tier, "text": text[:400], "status": "done" if done else "requested", **who})
         if feedback:
