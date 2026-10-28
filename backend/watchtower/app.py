@@ -398,6 +398,8 @@ def _propose(finding_key: str, tier: int, reason: str, agents=(), vcs=(), team: 
     publish("incident", state.incident)
     if f:  # the administrator hears about it at once, through AI Engine (Microsoft 365)
         _queue_email(f, reason="needs your confirmation")
+    if factory.auto:  # the factory's story runs on Auto-run: nobody is at the controls to press Confirm
+        asyncio.get_running_loop().create_task(_auto_confirm(action["id"]))
     return action
 
 
@@ -555,7 +557,7 @@ async def _respond_to_agent_alerts() -> None:
             response, tier = "Flagged the agent for review. Nothing is blocked yet.", "watch"
             publish("agent", agent)
             # Tier 0 tells the factory's story only until a higher tier was reported; after that it would step its page back.
-            if factory.department(agent["owner"]) and state.factory_max_tier == 0:
+            if factory.department(agent["owner"]) and state.factory_max_tier == 0 and not factory.short:
                 factory.send(0, f"WatchTower is watching {agent['agent_id']}: {alert['title']}", done=True, agent=agent["agent_id"])
         elif alert["tier"] == "revoke":  # tier 1: one agent's key, at once
             if _isolate(agent["agent_id"], "auto", alert["title"]):
@@ -568,6 +570,8 @@ async def _respond_to_agent_alerts() -> None:
             else:
                 response = "Already contained."
             tier = "revoke"
+        elif alert["tier"] == "cut_team" and factory.short:  # the factory's two-step story has no Tier 2: watch the group
+            response, tier = f"Watching {len(involved)} {alert['team']} agents in this channel. Nothing is blocked yet.", "watch"
         elif alert["tier"] == "cut_team":  # tier 2: every key of the department, no VC cut
             involved = sorted(a["agent_id"] for a in state.agents.values() if a["owner"] == alert["team"])
             still = [a for a in involved if running_agent(a)]
@@ -938,15 +942,35 @@ def _queue_email(f: dict, reason: str) -> None:
 @app.post("/api/cuts/{action_id}/approve")
 async def confirm_action(action_id: str):
     """A person confirms a proposed action: revoke the keys and cut the VCs it names, then report it."""
+    done = await _confirm(action_id, "reviewer")
+    if done is None:
+        return JSONResponse({"error": "no proposed action with that id (already confirmed or declined)"}, status_code=404)
+    return {"done": done}
+
+
+async def _confirm(action_id: str, by: str) -> str | None:
     action = state.pending.pop(action_id, None)
     if not action:
-        return JSONResponse({"error": "no proposed action with that id (already confirmed or declined)"}, status_code=404)
-    done = await _carry_out(action, "reviewer")
+        return None
+    done = await _carry_out(action, by)
+    if by == "auto-run":
+        done = done.replace("Confirmed:", "Confirmed by the factory's Auto-run (nobody at the controls):", 1)
     f = state.findings.get(action["finding_key"])
     if f:
         f["pending"] = None
         _finding(f["key"], f["tier"], f["what"], response=done)
-    return {"done": done}
+    return done
+
+
+AUTO_CONFIRM_S = float(os.getenv("AUTO_CONFIRM_S", "8"))
+
+
+async def _auto_confirm(action_id: str) -> None:
+    """While the agent factory runs its story on Auto-run, confirm a proposal after a pause long enough to see it."""
+    await asyncio.sleep(AUTO_CONFIRM_S)
+    if factory.auto and factory.running and action_id in state.pending:
+        log.info("auto-run: confirming %s", action_id)
+        await _confirm(action_id, "auto-run")
 
 
 @app.post("/api/actions/{action_id}/decline")

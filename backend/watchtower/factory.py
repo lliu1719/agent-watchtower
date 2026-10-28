@@ -17,6 +17,7 @@ import os
 import httpx
 
 log = logging.getLogger("watchtower.factory")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # the state poll runs every 2 s; each report logs its own line below
 
 URL = os.getenv("FACTORY_URL", "https://app-watchtower.solutionvalidation.center").rstrip("/")
 TOKEN = os.getenv("WATCHTOWER_TOKEN", "")
@@ -24,6 +25,8 @@ TEAM_PREFIX = "wt-"
 _order = asyncio.Lock()
 POLL_S = float(os.getenv("FACTORY_POLL_S", "2"))
 running: bool | None = None  # the factory's story is playing (None: its state cannot be read)
+auto = False  # the factory's Auto-run is on: nobody is at the controls, so WatchTower confirms by itself
+short = False  # the factory plays its two-step story (Tier 1, then Tier 3): no Tier 0 or Tier 2 reports
 on_reset = None  # set by the app: called when the factory's story is reset or restarted
 on_tier = None  # set by the app: called with each tier above 0 as it is reported  # reports reach the page in the order WatchTower acted (asyncio.Lock wakes waiters FIFO)
 
@@ -96,7 +99,7 @@ def restore(agents: list[str], departments: list[str], zone_was_cut: bool) -> No
 async def follow() -> None:
     """Poll the factory's state (GET /api/wt/state) so WatchTower starts over with it: when its story is reset or
     restarted, pending confirmations and findings from the old run must not reach the new one."""
-    global running
+    global running, auto, short
     if not enabled():
         return
     was_running, last_step, warned = None, 0, False
@@ -112,8 +115,10 @@ async def follow() -> None:
                     if on_reset:
                         await on_reset()
                 running, was_running, last_step, warned = now, now, step, False
+                auto = now and bool(snap.get("auto"))
+                short = snap.get("last_step") == 2
             except (httpx.HTTPError, ValueError) as e:
-                running = None  # unknown: report as before
+                running, auto = None, False  # unknown: report as before, and leave confirmations to people
                 if not warned:
                     log.warning("factory state unreadable (%s): reports are sent without checking it", getattr(getattr(e, "response", None), "status_code", type(e).__name__))
                     warned = True

@@ -629,15 +629,22 @@ function maybeToast(f, prev) {
   const analysisDone = f.key.startsWith('analysis:') && !prev;
   const escalated = rank >= TIERS.revoke.rank && (!prev || TIERS[prev.tier].rank < rank);
   const approvalNeeded = f.pending && !prev?.pending;
+  // Confirmed or declined anywhere (banner, event details, Auto-run): its notification has nothing left to ask.
+  if (prev?.pending && !f.pending) el('toasts').querySelector(`[data-finding-toast="${CSS.escape(f.id)}"]`)?.remove();
   if (analysisDone || escalated || approvalNeeded) toast(f);
 }
 
 function toast(f) {
   const t = TIERS[f.tier] || TIERS.info;
   const box = el('toasts');
-  box.querySelector(`[data-finding-toast="${CSS.escape(f.id)}"]`)?.remove();  // one card per event: the newest wording wins
+  // One notification at a time: the newest replaces the others, except a card still waiting for a Confirm,
+  // which stays until someone answers it.
+  const waiting = [...box.children].some(c => c.dataset.pending && c.dataset.findingToast !== f.id);
+  if (waiting && !f.pending) return;
+  box.replaceChildren();
   const card = document.createElement('div');
   card.dataset.findingToast = f.id;
+  if (f.pending) card.dataset.pending = '1';
   card.className = `toast tier-${t.cls}`;
   card.setAttribute('role', 'status');
   card.innerHTML = `
